@@ -1,6 +1,6 @@
 # Example vault-env configuration file
 kv:
-  mount: home
+  mount: kv
 
 secrets:
-  - path: myapp/plaintext
+  - path: myapp/db_password
