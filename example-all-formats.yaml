@@ -1,6 +1,6 @@
 # Comprehensive vlt configuration showing all supported formats
 kv:
-  mount: kv
+  mount: home
 
 # Optional transit encryption (can be omitted)
 # transit:

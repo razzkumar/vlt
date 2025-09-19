@@ -57,7 +57,7 @@ func getPutCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:  "kv-mount",
 				Usage: "KV v2 mount path",
-				Value: "kv",
+				Value: "home",
 			},
 			&cli.StringFlag{
 				Name:  "transit-mount",
@@ -134,7 +134,7 @@ Examples:
 			},
 			&cli.StringFlag{
 				Name:  "config",
-				Usage: "YAML config file with secret definitions (defaults to vlt.yaml if exists)",
+				Usage: "YAML config file with secret definitions (defaults to ./vlt.yaml or ~/.vlt.yaml)",
 			},
 			&cli.StringFlag{
 				Name:  "encryption-key",
@@ -151,7 +151,7 @@ Examples:
 			&cli.StringFlag{
 				Name:  "kv-mount",
 				Usage: "KV v2 mount path",
-				Value: "kv",
+				Value: "home",
 			},
 			&cli.StringFlag{
 				Name:  "transit-mount",
@@ -165,15 +165,13 @@ Examples:
 			kvPath := ctx.String("path")
 
 			if configFile == "" && kvPath == "" {
-				// Check if vlt.yaml exists in current directory
-				if _, err := os.Stat("vlt.yaml"); err == nil {
-					configFile = "vlt.yaml"
-				}
+				// Check for default config file (current directory, then global)
+				configFile = findConfigFile()
 			}
 
 			// Validate that we have either path or config
 			if kvPath == "" && configFile == "" {
-				return fmt.Errorf("either --path, --config, or vlt.yaml file must be specified")
+				return fmt.Errorf("either --path, --config, or vlt.yaml file (current directory or ~/.vlt.yaml) must be specified")
 			}
 
 			appInstance, err := app.New()
@@ -261,12 +259,13 @@ Examples:
   vlt run --config secrets.yaml --env-file .env.local -- python app.py
 
 Note: Use -- to separate vlt flags from the command to run.
-If vlt.yaml exists in the current directory, it will be used automatically if no --config is specified.`,
+Config file search order: ./vlt.yaml (current directory), then ~/.vlt.yaml (global).
+If either exists, it will be used automatically if no --config is specified.`,
 		ArgsUsage: "[-- command args...]",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:  "config",
-				Usage: "YAML config file with secret definitions (defaults to vlt.yaml if exists)",
+				Usage: "YAML config file with secret definitions (defaults to ./vlt.yaml or ~/.vlt.yaml)",
 			},
 			&cli.StringFlag{
 				Name:  "encryption-key",
@@ -283,7 +282,7 @@ If vlt.yaml exists in the current directory, it will be used automatically if no
 			&cli.StringFlag{
 				Name:  "kv-mount",
 				Usage: "KV v2 mount path",
-				Value: "kv",
+				Value: "home",
 			},
 			&cli.StringFlag{
 				Name:  "transit-mount",
@@ -306,15 +305,13 @@ If vlt.yaml exists in the current directory, it will be used automatically if no
 			injectSecrets := ctx.StringSlice("inject")
 
 			if configFile == "" && len(injectSecrets) == 0 {
-				// Check if vlt.yaml exists in current directory only if no inject flags
-				if _, err := os.Stat("vlt.yaml"); err == nil {
-					configFile = "vlt.yaml"
-				}
+				// Check for default config file (current directory, then global)
+				configFile = findConfigFile()
 			}
 
 			// Validate that we have either config or inject flags
 			if configFile == "" && len(injectSecrets) == 0 {
-				return fmt.Errorf("either --config, vlt.yaml file, or --inject must be specified")
+				return fmt.Errorf("either --config, vlt.yaml file (current directory or ~/.vlt.yaml), or --inject must be specified")
 			}
 
 			// Get the command to run (everything after --)
@@ -427,6 +424,25 @@ Examples:
 			return appInstance.JSON(opts)
 		},
 	}
+}
+
+// findConfigFile searches for vlt.yaml in current directory first, then ~/.vlt.yaml
+func findConfigFile() string {
+	// Check current directory first
+	if _, err := os.Stat("vlt.yaml"); err == nil {
+		return "vlt.yaml"
+	}
+	
+	// Check global config in home directory
+	homeDir, err := os.UserHomeDir()
+	if err == nil {
+		globalConfig := homeDir + "/.vlt.yaml"
+		if _, err := os.Stat(globalConfig); err == nil {
+			return globalConfig
+		}
+	}
+	
+	return ""
 }
 
 // handlePlaintextJSON handles JSON output without encryption (no vault client needed)

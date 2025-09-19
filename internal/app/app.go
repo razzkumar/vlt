@@ -252,7 +252,7 @@ func (a *App) GetFromConfig(configPath, encryptionKey string, outputJSON bool) e
 	effectiveEncryptionKey := config.GetEncryptionKey(encryptionKey)
 
 	// Use the shared logic for loading secrets
-	envVars, err := a.loadSecretsFromConfig(cfg, "kv", "transit", effectiveEncryptionKey)
+	envVars, err := a.loadSecretsFromConfig(cfg, "home", "transit", effectiveEncryptionKey)
 	if err != nil {
 		return fmt.Errorf("load secrets from config: %w", err)
 	}
@@ -381,7 +381,7 @@ func (a *App) GenerateEnvFile(configPath, outputPath string, encryptionKey strin
 	effectiveEncryptionKey := config.GetEncryptionKey(encryptionKey)
 
 	// Use the shared logic for loading secrets
-	envVars, err := a.loadSecretsFromConfig(cfg, "kv", "transit", effectiveEncryptionKey)
+	envVars, err := a.loadSecretsFromConfig(cfg, "home", "transit", effectiveEncryptionKey)
 	if err != nil {
 		return fmt.Errorf("load secrets from config: %w", err)
 	}
