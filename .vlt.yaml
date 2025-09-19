@@ -1,0 +1,6 @@
+# Example vault-env configuration file
+kv:
+  mount: home
+
+secrets:
+  - path: myapp/plaintext

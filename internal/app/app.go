@@ -78,12 +78,13 @@ func (a *App) Put(opts *PutOptions) error {
 		// Merge with existing data
 		finalData = utils.MergeData(finalData, newData)
 	} else if opts.FromFile != "" {
-		// Load file as base64
-		newData, err = utils.LoadFileAsBase64(opts.FromFile, a.vaultClient, opts.TransitMount, effectiveEncryptionKey, useEncryption)
+		// Load file with filename as key and base64 content as value
+		newData, err = utils.LoadFileAsKeyValue(opts.FromFile, a.vaultClient, opts.TransitMount, effectiveEncryptionKey, useEncryption)
 		if err != nil {
 			return fmt.Errorf("load file: %w", err)
 		}
-		finalData = newData
+		// Merge with existing data instead of replacing
+		finalData = utils.MergeData(finalData, newData)
 	} else {
 		// Single value (from --value, stdin, or key update)
 		var secretValue []byte

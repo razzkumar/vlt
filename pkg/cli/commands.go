@@ -122,7 +122,7 @@ Examples:
   # Get all secrets from config file
   vlt get --config secrets.yaml
   
-  # Get secrets from default config file (vlt.yaml)
+  # Get secrets from default config file (.vlt.yaml)
   vlt get
   
   # Output as JSON
@@ -134,7 +134,7 @@ Examples:
 			},
 			&cli.StringFlag{
 				Name:  "config",
-				Usage: "YAML config file with secret definitions (defaults to ./vlt.yaml or ~/.vlt.yaml)",
+				Usage: "YAML config file (search order: VLT_CONFIG env var, ./.vlt.yaml, ~/.vlt.yaml)",
 			},
 			&cli.StringFlag{
 				Name:  "encryption-key",
@@ -171,7 +171,7 @@ Examples:
 
 			// Validate that we have either path or config
 			if kvPath == "" && configFile == "" {
-				return fmt.Errorf("either --path, --config, or vlt.yaml file (current directory or ~/.vlt.yaml) must be specified")
+				return fmt.Errorf("either --path, --config, or config file (VLT_CONFIG env, ./.vlt.yaml, ~/.vlt.yaml) must be specified")
 			}
 
 			appInstance, err := app.New()
@@ -207,7 +207,7 @@ func getSyncCommand() *cli.Command {
 			&cli.StringFlag{
 				Name:  "config",
 				Usage: "YAML config file",
-				Value: "vlt.yaml",
+				Value: ".vlt.yaml",
 			},
 			&cli.StringFlag{
 				Name:  "output",
@@ -246,7 +246,7 @@ Examples:
   # Run with config file (most common)
   vlt run --config secrets.yaml -- go run main.go
   
-  # Run with default config file (vlt.yaml)
+  # Run with default config file (.vlt.yaml)
   vlt run -- go run main.go
   
   # Run with inline secret injection
@@ -259,13 +259,13 @@ Examples:
   vlt run --config secrets.yaml --env-file .env.local -- python app.py
 
 Note: Use -- to separate vlt flags from the command to run.
-Config file search order: ./vlt.yaml (current directory), then ~/.vlt.yaml (global).
-If either exists, it will be used automatically if no --config is specified.`,
+Config search order: VLT_CONFIG env var, ./.vlt.yaml (current directory), ~/.vlt.yaml (global).
+First found config will be used automatically if no --config is specified.`,
 		ArgsUsage: "[-- command args...]",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:  "config",
-				Usage: "YAML config file with secret definitions (defaults to ./vlt.yaml or ~/.vlt.yaml)",
+				Usage: "YAML config file (search order: VLT_CONFIG env var, ./.vlt.yaml, ~/.vlt.yaml)",
 			},
 			&cli.StringFlag{
 				Name:  "encryption-key",
@@ -311,7 +311,7 @@ If either exists, it will be used automatically if no --config is specified.`,
 
 			// Validate that we have either config or inject flags
 			if configFile == "" && len(injectSecrets) == 0 {
-				return fmt.Errorf("either --config, vlt.yaml file (current directory or ~/.vlt.yaml), or --inject must be specified")
+				return fmt.Errorf("either --config, config file (VLT_CONFIG env, ./.vlt.yaml, ~/.vlt.yaml), or --inject must be specified")
 			}
 
 			// Get the command to run (everything after --)
@@ -426,11 +426,18 @@ Examples:
 	}
 }
 
-// findConfigFile searches for vlt.yaml in current directory first, then ~/.vlt.yaml
+// findConfigFile searches for config in order: env var, .vlt.yaml (current dir), ~/.vlt.yaml (global)
 func findConfigFile() string {
-	// Check current directory first
-	if _, err := os.Stat("vlt.yaml"); err == nil {
-		return "vlt.yaml"
+	// First check environment variable
+	if envConfig := os.Getenv("VLT_CONFIG"); envConfig != "" {
+		if _, err := os.Stat(envConfig); err == nil {
+			return envConfig
+		}
+	}
+	
+	// Check current directory for .vlt.yaml
+	if _, err := os.Stat(".vlt.yaml"); err == nil {
+		return ".vlt.yaml"
 	}
 	
 	// Check global config in home directory

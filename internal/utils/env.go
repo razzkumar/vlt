@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/joho/godotenv"
@@ -70,6 +71,33 @@ func LoadFileAsBase64(path string, client *vault.Client, transitMount, keyName s
 	}
 
 	return map[string]any{"value": base64Content}, nil
+}
+
+// LoadFileAsKeyValue reads a file and uses filename as key, base64 content as value
+func LoadFileAsKeyValue(path string, client *vault.Client, transitMount, keyName string, useEncryption bool) (map[string]any, error) {
+	fileContent, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read file: %w", err)
+	}
+
+	base64Content := base64.StdEncoding.EncodeToString(fileContent)
+	
+	// Extract filename without path as the key
+	filename := filepath.Base(path)
+	
+	data := make(map[string]any)
+	
+	if useEncryption {
+		ciphertext, err := client.TransitEncrypt(transitMount, keyName, []byte(base64Content))
+		if err != nil {
+			return nil, fmt.Errorf("encrypt file content: %w", err)
+		}
+		data[filename] = ciphertext
+	} else {
+		data[filename] = base64Content
+	}
+	
+	return data, nil
 }
 
 // IsEncryptedSingleValue checks if data contains a single encrypted value
