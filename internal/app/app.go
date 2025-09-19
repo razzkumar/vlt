@@ -204,13 +204,28 @@ func (a *App) Get(opts *GetOptions) error {
 			if !ok {
 				return fmt.Errorf("key %q not found", opts.Key)
 			}
-			fmt.Print(value)
+			
+			// Check if this key has file metadata in original data
+			if utils.HasFileMetadata(data, opts.Key) {
+				// Save as file
+				if valueStr, ok := value.(string); ok {
+					return utils.SaveAsFile(opts.Key, valueStr)
+				} else {
+					return fmt.Errorf("file content for %q is not a string", opts.Key)
+				}
+			} else {
+				// Regular key - print value
+				fmt.Print(value)
+			}
 		} else if opts.OutputJSON {
 			if err := utils.OutputJSON(decryptedData); err != nil {
 				return fmt.Errorf("output json: %w", err)
 			}
 		} else {
-			utils.OutputEnvFormat(decryptedData)
+			// Handle files and regular values for decrypted data
+			if err := a.handleMultipleValuesWithFiles(data, false, decryptedData); err != nil {
+				return fmt.Errorf("handle multiple values: %w", err)
+			}
 		}
 		return nil
 	}
@@ -222,7 +237,19 @@ func (a *App) Get(opts *GetOptions) error {
 		if !ok {
 			return fmt.Errorf("key %q not found", opts.Key)
 		}
-		fmt.Print(value)
+		
+		// Check if this key has file metadata
+		if utils.HasFileMetadata(data, opts.Key) {
+			// Save as file
+			if valueStr, ok := value.(string); ok {
+				return utils.SaveAsFile(opts.Key, valueStr)
+			} else {
+				return fmt.Errorf("file content for %q is not a string", opts.Key)
+			}
+		} else {
+			// Regular key - print value
+			fmt.Print(value)
+		}
 	} else if len(data) == 1 {
 		// Single value - print it directly
 		for _, v := range data {
@@ -230,13 +257,9 @@ func (a *App) Get(opts *GetOptions) error {
 			break
 		}
 	} else {
-		// Multiple values - output based on format
-		if opts.OutputJSON {
-			if err := utils.OutputJSON(data); err != nil {
-				return fmt.Errorf("output json: %w", err)
-			}
-		} else {
-			utils.OutputEnvFormat(data)
+		// Multiple values - handle files and regular values
+		if err := a.handleMultipleValuesWithFiles(data, opts.OutputJSON); err != nil {
+			return fmt.Errorf("handle multiple values: %w", err)
 		}
 	}
 
@@ -682,6 +705,65 @@ func (a *App) JSON(opts *JSONOptions) error {
 		return fmt.Errorf("output json: %w", err)
 	}
 
+	return nil
+}
+
+// handleMultipleValuesWithFiles processes multiple values, saving files where metadata indicates and outputting regular values
+func (a *App) handleMultipleValuesWithFiles(originalData map[string]interface{}, outputJSON bool, valuesData ...map[string]interface{}) error {
+	// Use valuesData if provided (for decrypted data), otherwise use originalData
+	var valuesToProcess map[string]interface{}
+	if len(valuesData) > 0 && valuesData[0] != nil {
+		valuesToProcess = valuesData[0]
+	} else {
+		valuesToProcess = originalData
+	}
+	
+	regularValues := make(map[string]interface{})
+	filesProcessed := 0
+	
+	for key, value := range valuesToProcess {
+		// Skip metadata keys
+		if strings.HasSuffix(key, "_metadata") {
+			continue
+		}
+		
+		// Check if this key has file metadata
+		if utils.HasFileMetadata(originalData, key) {
+			// Save as file
+			if valueStr, ok := value.(string); ok {
+				if err := utils.SaveAsFile(key, valueStr); err != nil {
+					return err
+				}
+				filesProcessed++
+			} else {
+				return fmt.Errorf("file content for %q is not a string", key)
+			}
+		} else {
+			// Regular value - add to output
+			regularValues[key] = value
+		}
+	}
+	
+	// Output regular values if any exist
+	if len(regularValues) > 0 {
+		if outputJSON {
+			if err := utils.OutputJSON(regularValues); err != nil {
+				return fmt.Errorf("output json: %w", err)
+			}
+		} else {
+			utils.OutputEnvFormat(regularValues)
+		}
+	}
+	
+	// Show summary if files were processed
+	if filesProcessed > 0 {
+		if len(regularValues) > 0 {
+			fmt.Printf("\nProcessed %d file(s) and %d regular value(s)\n", filesProcessed, len(regularValues))
+		} else {
+			fmt.Printf("Processed %d file(s)\n", filesProcessed)
+		}
+	}
+	
 	return nil
 }
 

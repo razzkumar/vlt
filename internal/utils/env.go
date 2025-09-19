@@ -97,6 +97,9 @@ func LoadFileAsKeyValue(path string, client *vault.Client, transitMount, keyName
 		data[filename] = base64Content
 	}
 	
+	// Add metadata to indicate this is file content
+	data[filename+"_metadata"] = map[string]any{"type": "file"}
+	
 	return data, nil
 }
 
@@ -183,4 +186,36 @@ func MergeData(existing, new map[string]any) map[string]any {
 	}
 
 	return result
+}
+
+// HasFileMetadata checks if a key has associated file metadata
+func HasFileMetadata(data map[string]any, key string) bool {
+	metadataKey := key + "_metadata"
+	metadata, exists := data[metadataKey]
+	if !exists {
+		return false
+	}
+	
+	metadataMap, ok := metadata.(map[string]any)
+	if !ok {
+		return false
+	}
+	
+	fileType, ok := metadataMap["type"].(string)
+	return ok && fileType == "file"
+}
+
+// SaveAsFile decodes base64 content and saves it as a file
+func SaveAsFile(filename, base64Content string) error {
+	decodedContent, err := base64.StdEncoding.DecodeString(base64Content)
+	if err != nil {
+		return fmt.Errorf("decode base64 content for %s: %w", filename, err)
+	}
+	
+	if err := os.WriteFile(filename, decodedContent, 0644); err != nil {
+		return fmt.Errorf("write file %s: %w", filename, err)
+	}
+	
+	fmt.Printf("File saved: %s\n", filename)
+	return nil
 }

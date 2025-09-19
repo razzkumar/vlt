@@ -52,7 +52,7 @@ func getPutCommand() *cli.Command {
 			},
 			&cli.StringFlag{
 				Name:  "from-file",
-				Usage: "Load file content as base64 encoded value",
+				Usage: "Load file content as base64 encoded value with type=file metadata",
 			},
 			&cli.StringFlag{
 				Name:  "kv-mount",
@@ -124,6 +124,9 @@ Examples:
   
   # Get secrets from default config file (.vlt.yaml)
   vlt get
+  
+  # Get specific key (saves as file if it has type=file metadata)
+  vlt get --path secrets/files --key config.txt
   
   # Output as JSON
   vlt get --config secrets.yaml --json`,
