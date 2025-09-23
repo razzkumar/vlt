@@ -1,34 +1,128 @@
-# Comprehensive vlt configuration showing all supported formats
+# ===== .vlt.demo.yaml ======
+# vault:
+#   addr: "http://localhost:8200"
+
+# kv:
+#   mount: home
+
+# # Global file storage settings
+# files:
+#   output_dir: "./demo_output"
+#   default_mode: "0640"
+#   create_dirs: true
+
+# secrets:
+#   # Regular environment variables (no file config)
+#   - path: test/config
+  
+#   # File with custom path and strict permissions
+#   - path: test/certificates
+#     key: ssl_cert.pem
+#     file:
+#       path: "./certs/server.pem"
+#       mode: "0600"
+#       create_dir: true
+  
+#   # File using global settings (will be ./demo_output/api_key.txt with mode 0640)
+#   - path: test/keys
+#     key: api_key.txt
+#     file: {}
+  
+#   # Example: Private key with home directory path
+#   - path: test/certificates
+#     key: ssl_cert.pem
+#     env_key: SERVER_CERT  # This will be ignored since it has file config
+#     file:
+#       path: "~/demo_keys/private.key"
+#       mode: "0400"  # Read-only for owner
+#       create_dir: true
+
+
+# Enhanced vault-env configuration file with file storage options
+# ===== .vlt.example.yaml ======
+# vault:
+#   addr: "https://your-vault-server.com:8200"
+#   # Uncomment and set these for GitHub auth:
+#   # github_token: "ghp_xxxxxxxxxxxxx"
+#   # auth_method: "github"
+
+# kv:
+#   mount: home
+
+# # Global file storage configuration (optional)
+# files:
+#   output_dir: "./secrets"              # Default directory for files
+#   default_mode: "0600"                # Default file permissions (octal)
+#   create_dirs: true                   # Create directories if they don't exist
+
+# secrets:
+#   # Regular secret - loads all keys as environment variables
+#   - path: myapp/config
+  
+#   # File secret - saves specific key to file with custom configuration
+#   - path: myapp/ssh
+#     key: private.pem
+#     file:
+#       path: "~/ssh/wp.pem"          # Supports ~ expansion, absolute or relative paths
+#       mode: "0600"                  # Restrictive permissions for private key
+#       create_dir: true              # Create directory if it doesn't exist
+  
+#   # File secret using global settings - saves to default location
+#   - path: ssl/certificates
+#     key: server.crt
+#     file:                           # Uses global settings (./secrets/server.crt with mode 0600)
+#       # path defaults to: {global_output_dir}/{key_name}
+#       # mode defaults to: global default_mode
+#       # create_dir defaults to: global create_dirs
+  
+#   # File secret with absolute path
+#   - path: ssl/certificates
+#     key: ca-bundle.pem
+#     file:
+#       path: "/etc/ssl/certs/ca-bundle.pem"  # Absolute path
+#       mode: "0644"
+#       create_dir: true
+  
+#   # Regular secret with custom env var name
+#   - path: myapp/database
+#     key: password
+#     env_key: DB_PASS                # Will be available as $DB_PASS instead of $PASSWORD
+  
+#   # Load all keys from a path as environment variables
+#   - path: myapp/api_keys
+#     file: 
+#       path: "~/ssh/wp.pem"
+#       mode: "0600" 
+#       create_dir: true   
+
+
+# Simple test configuration demonstrating file storage
+# ===== .vlt.text.yaml ======
+vault:
+  addr: "http://localhost:8200"
+
 kv:
   mount: home
 
-# Optional transit encryption (can be omitted)
-# transit:
-#   mount: transit
-#   key: myapp-key
+# Global file storage settings
+files:
+  output_dir: "./test_files"
+  default_mode: "0644"
+  create_dirs: true
 
 secrets:
-  # ===== PATH-BASED FORMATS (NEW) =====
+  # Regular environment variables
+  - path: test/config
   
-  # 1. Load ALL keys from a path as environment variables
-  # All keys become UPPERCASE env vars (e.g., db_password → DB_PASSWORD)
-  - path: myapp/config
+  # File with custom path and permissions
+  - path: test/certificates
+    key: ssl_cert.pem
+    file:
+      path: "~/certs/ssl.pem"
+      mode: "0600"
+      create_dir: true
   
-  # 2. Load SINGLE key from path (key name becomes env var name)
-  # Creates: DB_PASSWORD=secret123
-  - path: myapp/config
-    key: db_password
-    
-  # 3. Load SINGLE key from path with CUSTOM env var name
-  # Creates: DATABASE_PASS=secret123 (instead of DB_PASSWORD)
-  - path: myapp/config
-    key: db_password
-    env_key: DATABASE_PASS
-  
-  # ===== INDIVIDUAL FORMAT (OLD - still supported) =====
-  
-  # 4. Individual secret mapping (legacy format)
-  - name: jwt_secret
-    kv_path: myapp/jwt
-    env_var: JWT_SECRET
-    required: true
+  # File using global settings
+  - path: test/keys
+    key: api_key.txt
+    file: {}  # Uses defaults: ./test_files/api_key.txt with mode 0644

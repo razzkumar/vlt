@@ -77,11 +77,19 @@ func (a *App) loadSecretsFromConfig(cfg *config.Config, kvMount, transitMount, e
 			}
 		} else if secret.IsPathSingleKey() {
 			// Selective format: load single key from path
-			secretValue, err := a.loadSingleKeyFromPath(cfg, &secret, kvMount, transitMount, encryptionKey)
-			if err != nil {
-				return nil, fmt.Errorf("failed to load key %s from path %s: %w", secret.Key, secret.Path, err)
+			if secret.IsFileEntry() {
+				// File entry - save to file instead of env var
+				if err := a.handleFileEntry(cfg, &secret, kvMount, transitMount, encryptionKey); err != nil {
+					return nil, fmt.Errorf("failed to save file for key %s from path %s: %w", secret.Key, secret.Path, err)
+				}
+				// Don't add to envVars since it's a file
+			} else {
+				secretValue, err := a.loadSingleKeyFromPath(cfg, &secret, kvMount, transitMount, encryptionKey)
+				if err != nil {
+					return nil, fmt.Errorf("failed to load key %s from path %s: %w", secret.Key, secret.Path, err)
+				}
+				envVars[secret.GetEnvKeyName()] = secretValue
 			}
-			envVars[secret.GetEnvKeyName()] = secretValue
 		} else if secret.IsIndividual() {
 			// Old format: individual secret mapping
 			secretValue, err := a.loadIndividualSecret(cfg, &secret, kvMount, transitMount, encryptionKey)
@@ -221,4 +229,26 @@ func (a *App) loadSingleKeyFromPath(cfg *config.Config, secret *config.SecretEnt
 		return "", fmt.Errorf("key %q not found at path %s", secret.Key, secret.Path)
 	}
 	return fmt.Sprintf("%v", value), nil
+}
+
+// handleFileEntry processes a file entry from the config and saves it to disk
+func (a *App) handleFileEntry(cfg *config.Config, secret *config.SecretEntry, kvMount, transitMount, encryptionKey string) error {
+	// Get the secret value (same logic as loadSingleKeyFromPath but for files)
+	secretValue, err := a.loadSingleKeyFromPath(cfg, secret, kvMount, transitMount, encryptionKey)
+	if err != nil {
+		return err
+	}
+	
+	// Get the file configuration for this secret
+	fileConfig := cfg.GetSecretFileConfig(secret)
+	
+	// Convert to utils.FileStorageOptions
+	storageOpts := utils.FileStorageOptions{
+		Path:      fileConfig.Path,
+		Mode:      fileConfig.Mode,
+		CreateDir: *fileConfig.CreateDir,
+	}
+	
+	// Save the file
+	return utils.SaveAsFileWithOptions(secretValue, storageOpts)
 }
