@@ -60,11 +60,11 @@ func (a *App) Put(opts *PutOptions) error {
 		if err != nil {
 			return fmt.Errorf("read file: %w", err)
 		}
-		
+
 		// Use filename as key, base64 content as value
 		filename := filepath.Base(opts.FromFile)
 		base64Content := base64.StdEncoding.EncodeToString(fileContent)
-		
+
 		var value interface{}
 		if useEncryption {
 			ciphertext, err := a.vaultClient.TransitEncrypt(opts.TransitMount, effectiveEncryptionKey, []byte(base64Content))
@@ -75,8 +75,11 @@ func (a *App) Put(opts *PutOptions) error {
 		} else {
 			value = base64Content
 		}
-		
-		newData = map[string]interface{}{filename: value}
+
+		newData = map[string]interface{}{
+			filename:               value,
+			filename + "_metadata": map[string]interface{}{"type": "file"},
+		}
 		// Merge with existing data
 		finalData = utils.MergeData(finalData, newData)
 	} else {
