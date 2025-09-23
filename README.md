@@ -37,6 +37,10 @@ vlt/
 - **Plaintext storage**: Option to store secrets without additional encryption
 - **Flexible key requirement**: Transit key only required when encryption is enabled
 
+## Documentation
+
+- [vlt Guide](docs/GUIDE.md)
+
 ## Built With
 
 - **[urfave/cli v2](https://github.com/urfave/cli)** - Modern CLI framework with advanced features

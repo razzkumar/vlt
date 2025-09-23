@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -23,7 +24,30 @@ type Config struct {
 	KV struct {
 		Mount string `yaml:"mount"`
 	} `yaml:"kv"`
-	Secrets []SecretEntry `yaml:"secrets"`
+	Files   *FileStorageConfig `yaml:"files,omitempty"`
+	Secrets []SecretEntry      `yaml:"secrets"`
+}
+
+// FileStorageConfig holds global file storage configuration
+type FileStorageConfig struct {
+	// OutputDir specifies the default directory where files should be saved (default: current directory)
+	OutputDir string `yaml:"output_dir,omitempty"`
+	// DefaultMode sets the default file permissions (octal, e.g., 0644)
+	DefaultMode string `yaml:"default_mode,omitempty"`
+	// CreateDirs controls whether to create directories if they don't exist by default (defaults to true)
+	CreateDirs *bool `yaml:"create_dirs,omitempty"`
+}
+
+// SecretFileConfig holds file configuration for a specific secret
+type SecretFileConfig struct {
+	// Path specifies the full path where this file should be saved
+	// Supports tilde expansion (~) and can be absolute or relative
+	// If relative and no global output_dir, uses current directory
+	Path string `yaml:"path,omitempty"`
+	// Mode sets file permissions (octal, e.g., 0600) - defaults to global default or 0644
+	Mode string `yaml:"mode,omitempty"`
+	// CreateDir controls whether to create the directory for this file - defaults to global setting or true
+	CreateDir *bool `yaml:"create_dir,omitempty"`
 }
 
 // SecretEntry represents a secret configuration entry
@@ -32,17 +56,21 @@ type Config struct {
 // 2. New format: all keys from path (path only)
 // 3. Selective format: single key from path (path + key)
 // 4. Mapped format: single key from path with custom env name (path + key + env_key)
+// 5. File format: save key as file with file configuration (path + key + file)
 type SecretEntry struct {
 	// Old format - individual secret mapping
 	Name     string `yaml:"name,omitempty"`
-	KVPath   string `yaml:"kv_path,omitempty"` // path under kv mount
-	EnvVar   string `yaml:"env_var,omitempty"` // environment variable name
+	KVPath   string `yaml:"kv_path,omitempty"`  // path under kv mount
+	EnvVar   string `yaml:"env_var,omitempty"`  // environment variable name
 	Required bool   `yaml:"required,omitempty"` // fail if secret not found
-	
+
 	// New formats - path-based
 	Path   string `yaml:"path,omitempty"`    // vault path
 	Key    string `yaml:"key,omitempty"`     // specific key to extract (optional)
 	EnvKey string `yaml:"env_key,omitempty"` // custom env var name (optional, requires key)
+
+	// File configuration - when this key should be saved as a file
+	File *SecretFileConfig `yaml:"file,omitempty"`
 }
 
 // VaultConfig holds Vault client configuration
@@ -53,21 +81,21 @@ type VaultConfig struct {
 	CACert     string
 	SkipVerify bool
 	Timeout    int // seconds
-	
+
 	// Authentication methods
 	AuthMethod string // auto-detected or explicitly set
-	
+
 	// AppRole auth
 	RoleID   string
 	SecretID string
-	
+
 	// GitHub auth
 	GitHubToken string
-	
+
 	// Kubernetes auth
-	K8sRole        string
-	K8sJWTPath     string // defaults to /var/run/secrets/kubernetes.io/serviceaccount/token
-	K8sAuthPath    string // defaults to kubernetes
+	K8sRole     string
+	K8sJWTPath  string // defaults to /var/run/secrets/kubernetes.io/serviceaccount/token
+	K8sAuthPath string // defaults to kubernetes
 }
 
 // GetVaultConfigFromEnv creates VaultConfig from environment variables
@@ -78,17 +106,17 @@ func GetVaultConfigFromEnv() *VaultConfig {
 		Namespace: os.Getenv("VAULT_NAMESPACE"),
 		CACert:    os.Getenv("VAULT_CACERT"),
 		Timeout:   15, // default timeout
-		
+
 		// Auth method (explicit or auto-detected)
 		AuthMethod: strings.ToLower(os.Getenv("VAULT_AUTH_METHOD")),
-		
+
 		// AppRole auth
 		RoleID:   os.Getenv("VAULT_ROLE_ID"),
 		SecretID: os.Getenv("VAULT_SECRET_ID"),
-		
+
 		// GitHub auth
 		GitHubToken: os.Getenv("VAULT_GITHUB_TOKEN"),
-		
+
 		// Kubernetes auth
 		K8sRole:     os.Getenv("VAULT_K8S_ROLE"),
 		K8sJWTPath:  os.Getenv("VAULT_K8S_JWT_PATH"),
@@ -104,7 +132,7 @@ func GetVaultConfigFromEnv() *VaultConfig {
 			cfg.Timeout = t
 		}
 	}
-	
+
 	// Set defaults for Kubernetes auth
 	if cfg.K8sJWTPath == "" {
 		cfg.K8sJWTPath = "/var/run/secrets/kubernetes.io/serviceaccount/token"
@@ -121,12 +149,12 @@ func (c *VaultConfig) Validate() error {
 	if c.Addr == "" {
 		return ErrMissingVaultAddr
 	}
-	
+
 	// Auto-detect auth method if not explicitly set
 	if c.AuthMethod == "" {
 		c.AuthMethod = c.DetectAuthMethod()
 	}
-	
+
 	// Validate based on auth method
 	switch c.AuthMethod {
 	case "token":
@@ -151,7 +179,7 @@ func (c *VaultConfig) Validate() error {
 	default:
 		return fmt.Errorf("unsupported or auto-detected auth method: %s. Supported: token, approle, github, kubernetes", c.AuthMethod)
 	}
-	
+
 	return nil
 }
 
@@ -180,17 +208,17 @@ func GetEncryptionKey(flagValue string) string {
 	if flagValue != "" {
 		return flagValue
 	}
-	
+
 	envKey := os.Getenv("ENCRYPTION_KEY")
 	if envKey != "" {
 		return envKey
 	}
-	
+
 	// If TRANSIT is enabled but no encryption key configured, use default
 	if IsTransitEnabled() {
 		return "app-secrets"
 	}
-	
+
 	return ""
 }
 
@@ -215,12 +243,12 @@ func GetTransitMount(flagValue string) string {
 	if flagValue != "" {
 		return flagValue
 	}
-	
+
 	envMount := os.Getenv("TRANSIT_MOUNT")
 	if envMount != "" {
 		return envMount
 	}
-	
+
 	// Default to "transit" (this is already the default in CLI flags, but good to be explicit)
 	return "transit"
 }
@@ -231,7 +259,7 @@ func ShouldUseEncryption(encryptionKey string) bool {
 	if IsTransitEnabled() {
 		return true
 	}
-	
+
 	// If encryption key is provided and TRANSIT is not explicitly disabled, use encryption
 	if encryptionKey != "" {
 		// Check if TRANSIT is explicitly disabled
@@ -241,7 +269,7 @@ func ShouldUseEncryption(encryptionKey string) bool {
 		}
 		return true
 	}
-	
+
 	// Default: no encryption
 	return false
 }
@@ -276,6 +304,16 @@ func (s *SecretEntry) IsPathSingleKey() bool {
 	return s.Path != "" && s.Key != ""
 }
 
+// IsFileEntry returns true if this secret should be saved as a file
+func (s *SecretEntry) IsFileEntry() bool {
+	return s.File != nil
+}
+
+// RequiresKey returns true if this entry must have a key specified
+func (s *SecretEntry) RequiresKey() bool {
+	return s.IsFileEntry() // File entries always need a specific key
+}
+
 // GetEnvKeyName returns the environment variable name for this secret
 func (s *SecretEntry) GetEnvKeyName() string {
 	if s.EnvKey != "" {
@@ -301,4 +339,98 @@ func (c *Config) GetTransitKey() string {
 		return c.Transit.Key
 	}
 	return ""
+}
+
+// GetFileStorageConfig returns file storage configuration with defaults
+func (c *Config) GetFileStorageConfig() *FileStorageConfig {
+	if c.Files == nil {
+		defaultCreateDirs := true
+		c.Files = &FileStorageConfig{
+			OutputDir:   ".",
+			DefaultMode: "0644",
+			CreateDirs:  &defaultCreateDirs,
+		}
+		return c.Files
+	}
+
+	// Apply defaults to existing config
+	if c.Files.OutputDir == "" {
+		c.Files.OutputDir = "."
+	}
+	if c.Files.DefaultMode == "" {
+		c.Files.DefaultMode = "0644"
+	}
+	if c.Files.CreateDirs == nil {
+		defaultCreateDirs := true
+		c.Files.CreateDirs = &defaultCreateDirs
+	}
+
+	return c.Files
+}
+
+// GetSecretFileConfig returns the resolved file configuration for a secret entry
+func (c *Config) GetSecretFileConfig(secretEntry *SecretEntry) SecretFileConfig {
+	fileStorage := c.GetFileStorageConfig()
+
+	if secretEntry.File == nil {
+		// Return default config using key as filename
+		filename := secretEntry.Key
+		if filename == "" {
+			filename = "secret_file"
+		}
+		createDir := true
+		if fileStorage.CreateDirs != nil {
+			createDir = *fileStorage.CreateDirs
+		}
+		return SecretFileConfig{
+			Path:      filepath.Join(fileStorage.OutputDir, filename),
+			Mode:      fileStorage.DefaultMode,
+			CreateDir: &createDir,
+		}
+	}
+
+	// Start with the secret's file config
+	result := *secretEntry.File
+
+	// Apply defaults
+	if result.Mode == "" {
+		result.Mode = fileStorage.DefaultMode
+	}
+
+	if result.CreateDir == nil {
+		result.CreateDir = fileStorage.CreateDirs
+	}
+
+	// Resolve path
+	if result.Path == "" {
+		// Use key as filename with global output dir
+		filename := secretEntry.Key
+		if filename == "" {
+			filename = "secret_file"
+		}
+		result.Path = filepath.Join(fileStorage.OutputDir, filename)
+	} else {
+		// Expand tilde and resolve relative paths
+		result.Path = expandPath(result.Path, fileStorage.OutputDir)
+	}
+
+	return result
+}
+
+// expandPath expands ~ and resolves relative paths
+func expandPath(path, outputDir string) string {
+	// Expand tilde
+	if strings.HasPrefix(path, "~/") {
+		homeDir, err := os.UserHomeDir()
+		if err == nil {
+			path = filepath.Join(homeDir, path[2:])
+		}
+	}
+
+	// If still relative and we have an output dir, make it relative to output dir
+	if !filepath.IsAbs(path) && outputDir != "" {
+		path = filepath.Join(outputDir, path)
+	}
+
+	return path
 }

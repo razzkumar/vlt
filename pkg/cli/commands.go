@@ -125,8 +125,8 @@ Examples:
   # Get secrets from default config file (.vlt.yaml)
   vlt get
   
-  # Get specific key (saves as file if it has type=file metadata)
-  vlt get --path secrets/files --key config.txt
+	  # Get specific key from multi-value secret
+	  vlt get --path secrets/config --key database_password
   
   # Output as JSON
   vlt get --config secrets.yaml --json`,
@@ -184,8 +184,19 @@ Examples:
 
 			if configFile != "" {
 				// Use config file to get all secrets
-				return appInstance.GetFromConfig(configFile, ctx.String("encryption-key"), ctx.Bool("json"))
+				return appInstance.GetFromConfigWithOptions(configFile, &app.GetFromConfigOptions{
+					EncryptionKey: ctx.String("encryption-key"),
+					OutputJSON:    ctx.Bool("json"),
+				})
 			} else {
+				// Load config for file storage settings if available
+				var cfg *config.Config
+				if configFile := findConfigFile(); configFile != "" {
+					if loadedCfg, err := appInstance.LoadConfig(configFile); err == nil {
+						cfg = loadedCfg
+					}
+				}
+				
 				// Use direct path
 				opts := &app.GetOptions{
 					KVMount:       ctx.String("kv-mount"),
@@ -194,6 +205,7 @@ Examples:
 					EncryptionKey: ctx.String("encryption-key"),
 					Key:           ctx.String("key"),
 					OutputJSON:    ctx.Bool("json"),
+					Config:        cfg,
 				}
 				return appInstance.Get(opts)
 			}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/joho/godotenv"
@@ -71,36 +72,6 @@ func LoadFileAsBase64(path string, client *vault.Client, transitMount, keyName s
 	}
 
 	return map[string]any{"value": base64Content}, nil
-}
-
-// LoadFileAsKeyValue reads a file and uses filename as key, base64 content as value
-func LoadFileAsKeyValue(path string, client *vault.Client, transitMount, keyName string, useEncryption bool) (map[string]any, error) {
-	fileContent, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read file: %w", err)
-	}
-
-	base64Content := base64.StdEncoding.EncodeToString(fileContent)
-	
-	// Extract filename without path as the key
-	filename := filepath.Base(path)
-	
-	data := make(map[string]any)
-	
-	if useEncryption {
-		ciphertext, err := client.TransitEncrypt(transitMount, keyName, []byte(base64Content))
-		if err != nil {
-			return nil, fmt.Errorf("encrypt file content: %w", err)
-		}
-		data[filename] = ciphertext
-	} else {
-		data[filename] = base64Content
-	}
-	
-	// Add metadata to indicate this is file content
-	data[filename+"_metadata"] = map[string]any{"type": "file"}
-	
-	return data, nil
 }
 
 // IsEncryptedSingleValue checks if data contains a single encrypted value
@@ -188,34 +159,106 @@ func MergeData(existing, new map[string]any) map[string]any {
 	return result
 }
 
-// HasFileMetadata checks if a key has associated file metadata
+// HasFileMetadata checks whether the given key is marked as a file entry via metadata
 func HasFileMetadata(data map[string]any, key string) bool {
-	metadataKey := key + "_metadata"
-	metadata, exists := data[metadataKey]
-	if !exists {
-		return false
-	}
-	
-	metadataMap, ok := metadata.(map[string]any)
-	if !ok {
-		return false
-	}
-	
-	fileType, ok := metadataMap["type"].(string)
-	return ok && fileType == "file"
+	_, ok := FileOptionsFromMetadata(data, key)
+	return ok
 }
 
-// SaveAsFile decodes base64 content and saves it as a file
+// FileOptionsFromMetadata returns file storage options derived from metadata if present
+func FileOptionsFromMetadata(data map[string]any, key string) (*FileStorageOptions, bool) {
+	metadataKey := key + "_metadata"
+	rawMetadata, exists := data[metadataKey]
+	if !exists {
+		return nil, false
+	}
+
+	metadataMap, ok := rawMetadata.(map[string]any)
+	if !ok {
+		return nil, false
+	}
+
+	fileType, ok := metadataMap["type"].(string)
+	if !ok || fileType != "file" {
+		return nil, false
+	}
+
+	opts := &FileStorageOptions{
+		Path:      key,
+		Mode:      "0644",
+		CreateDir: false,
+	}
+
+	if pathVal, ok := metadataMap["path"].(string); ok && pathVal != "" {
+		opts.Path = pathVal
+	}
+	if modeVal, ok := metadataMap["mode"].(string); ok && modeVal != "" {
+		opts.Mode = modeVal
+	}
+	if createDirVal, ok := metadataMap["create_dir"].(bool); ok {
+		opts.CreateDir = createDirVal
+	}
+
+	return opts, true
+}
+
+// FileStorageOptions holds options for file storage
+type FileStorageOptions struct {
+	Path      string // Full path where the file should be saved
+	Mode      string // File permissions in octal (e.g., "0644")
+	CreateDir bool   // Whether to create directories if they don't exist
+}
+
+// SaveAsFile decodes base64 content and saves it as a file (legacy function for backward compatibility)
 func SaveAsFile(filename, base64Content string) error {
+	opts := FileStorageOptions{
+		Path:      filename,
+		Mode:      "0644",
+		CreateDir: false,
+	}
+	return SaveAsFileWithOptions(base64Content, opts)
+}
+
+// SaveAsFileWithOptions decodes base64 content and saves it as a file with configurable options
+func SaveAsFileWithOptions(base64Content string, opts FileStorageOptions) error {
 	decodedContent, err := base64.StdEncoding.DecodeString(base64Content)
 	if err != nil {
-		return fmt.Errorf("decode base64 content for %s: %w", filename, err)
+		return fmt.Errorf("decode base64 content for %s: %w", opts.Path, err)
 	}
-	
-	if err := os.WriteFile(filename, decodedContent, 0644); err != nil {
-		return fmt.Errorf("write file %s: %w", filename, err)
+
+	// Create directory if needed
+	if opts.CreateDir {
+		dir := filepath.Dir(opts.Path)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("create directory %s: %w", dir, err)
+		}
 	}
-	
-	fmt.Printf("File saved: %s\n", filename)
+
+	// Parse file permissions
+	mode, err := parseFileMode(opts.Mode)
+	if err != nil {
+		return fmt.Errorf("invalid file mode %s: %w", opts.Mode, err)
+	}
+
+	if err := os.WriteFile(opts.Path, decodedContent, mode); err != nil {
+		return fmt.Errorf("write file %s: %w", opts.Path, err)
+	}
+
+	fmt.Printf("File saved: %s (mode: %s)\n", opts.Path, opts.Mode)
 	return nil
+}
+
+// parseFileMode parses octal file mode string (e.g., "0644") to os.FileMode
+func parseFileMode(modeStr string) (os.FileMode, error) {
+	if modeStr == "" {
+		return 0644, nil // default
+	}
+
+	// Parse octal string
+	mode, err := strconv.ParseUint(modeStr, 8, 32)
+	if err != nil {
+		return 0, fmt.Errorf("invalid octal mode: %w", err)
+	}
+
+	return os.FileMode(mode), nil
 }

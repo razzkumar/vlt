@@ -1,6 +1,12 @@
 # Example vault-env configuration file
+vault:
+  addr: "http://localhost:8200"
+  # Uncomment and set these for GitHub auth:
+  # github_token: "ghp_xxxxxxxxxxxxx"
+  # auth_method: "github"
+
 kv:
-  mount: kv
+  mount: home
 
 secrets:
   - path: myapp/db_password

@@ -1,9 +1,11 @@
 package app
 
 import (
+	"encoding/base64"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/razzkumar/vlt/internal/utils"
 	"github.com/razzkumar/vlt/pkg/config"
@@ -53,12 +55,32 @@ func (a *App) Put(opts *PutOptions) error {
 		// Merge with existing data
 		finalData = utils.MergeData(finalData, newData)
 	} else if opts.FromFile != "" {
-		// Load file with filename as key and base64 content as value
-		newData, err = utils.LoadFileAsKeyValue(opts.FromFile, a.vaultClient, opts.TransitMount, effectiveEncryptionKey, useEncryption)
+		// Load file content and use filename as key
+		fileContent, err := os.ReadFile(opts.FromFile)
 		if err != nil {
-			return fmt.Errorf("load file: %w", err)
+			return fmt.Errorf("read file: %w", err)
 		}
-		// Merge with existing data instead of replacing
+
+		// Use filename as key, base64 content as value
+		filename := filepath.Base(opts.FromFile)
+		base64Content := base64.StdEncoding.EncodeToString(fileContent)
+
+		var value interface{}
+		if useEncryption {
+			ciphertext, err := a.vaultClient.TransitEncrypt(opts.TransitMount, effectiveEncryptionKey, []byte(base64Content))
+			if err != nil {
+				return fmt.Errorf("encrypt file content: %w", err)
+			}
+			value = ciphertext
+		} else {
+			value = base64Content
+		}
+
+		newData = map[string]interface{}{
+			filename:               value,
+			filename + "_metadata": map[string]interface{}{"type": "file"},
+		}
+		// Merge with existing data
 		finalData = utils.MergeData(finalData, newData)
 	} else {
 		// Single value (from --value, stdin, or key update)
