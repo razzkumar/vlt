@@ -1,0 +1,39 @@
+# Comprehensive demo configuration for file storage features
+
+vault:
+  addr: "http://localhost:8200"
+
+kv:
+  mount: home
+
+# Global file storage settings
+files:
+  output_dir: "./demo_output"
+  default_mode: "0640"
+  create_dirs: true
+
+secrets:
+  # Regular environment variables (no file config)
+  - path: test/config
+  
+  # File with custom path and strict permissions
+  - path: test/certificates
+    key: test_cert.pem
+    file:
+      path: "./certs/server.pem"
+      mode: "0600"
+      create_dir: true
+  
+  # File using global settings (will be ./demo_output/api_key.txt with mode 0640)
+  - path: test/keys
+    key: api_key.txt
+    file: {}
+  
+  # Example: Private key with home directory path
+  - path: test/certificates
+    key: test_cert.pem
+    env_key: SERVER_CERT  # This will be ignored since it has file config
+    file:
+      path: "~/demo_keys/private.key"
+      mode: "0400"  # Read-only for owner
+      create_dir: true

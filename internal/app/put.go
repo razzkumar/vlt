@@ -76,10 +76,7 @@ func (a *App) Put(opts *PutOptions) error {
 			value = base64Content
 		}
 
-		newData = map[string]interface{}{
-			filename:               value,
-			filename + "_metadata": map[string]interface{}{"type": "file"},
-		}
+		newData = map[string]interface{}{filename: value}
 		// Merge with existing data
 		finalData = utils.MergeData(finalData, newData)
 	} else {

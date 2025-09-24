@@ -61,16 +61,11 @@ func (a *App) Get(opts *GetOptions) error {
 			if !ok {
 				return fmt.Errorf("key %q not found", opts.Key)
 			}
-			if handled, err := a.handleFileValue(data, opts, opts.Key, value); err != nil {
-				return err
-			} else if handled {
-				return nil
-			}
 			fmt.Print(value)
 			return nil
 		}
 
-		if err := a.handleMultipleValuesWithFiles(data, opts, decryptedData); err != nil {
+		if err := a.handleMultipleValues(decryptedData, opts.OutputJSON); err != nil {
 			return fmt.Errorf("handle multiple values: %w", err)
 		}
 		return nil
@@ -81,11 +76,6 @@ func (a *App) Get(opts *GetOptions) error {
 		value, ok := data[opts.Key]
 		if !ok {
 			return fmt.Errorf("key %q not found", opts.Key)
-		}
-		if handled, err := a.handleFileValue(data, opts, opts.Key, value); err != nil {
-			return err
-		} else if handled {
-			return nil
 		}
 		fmt.Print(value)
 		return nil
@@ -99,9 +89,35 @@ func (a *App) Get(opts *GetOptions) error {
 		}
 	}
 
-	// Multiple values - handle files and regular values
-	if err := a.handleMultipleValuesWithFiles(data, opts); err != nil {
+	// Multiple values - output as environment variables
+	if err := a.handleMultipleValues(data, opts.OutputJSON); err != nil {
 		return fmt.Errorf("handle multiple values: %w", err)
+	}
+
+	return nil
+}
+
+// handleMultipleValues processes multiple values and outputs them
+func (a *App) handleMultipleValues(data map[string]interface{}, outputJSON bool) error {
+	// Skip metadata keys and output regular values
+	regularValues := make(map[string]interface{})
+	for key, value := range data {
+		// Skip metadata keys
+		if strings.HasSuffix(key, "_metadata") {
+			continue
+		}
+		regularValues[key] = value
+	}
+
+	// Output regular values
+	if len(regularValues) > 0 {
+		if outputJSON {
+			if err := utils.OutputJSON(regularValues); err != nil {
+				return fmt.Errorf("output json: %w", err)
+			}
+		} else {
+			utils.OutputEnvFormat(regularValues)
+		}
 	}
 
 	return nil
@@ -150,124 +166,6 @@ func (a *App) GetFromConfigWithOptions(configPath string, opts *GetFromConfigOpt
 		}
 	} else {
 		utils.OutputEnvFormat(data)
-	}
-
-	return nil
-}
-
-// handleMultipleValuesWithFiles processes multiple values, saving files where metadata indicates and outputting regular values
-func (a *App) handleMultipleValuesWithFiles(originalData map[string]interface{}, opts *GetOptions, valuesData ...map[string]interface{}) error {
-	// Use valuesData if provided (for decrypted data), otherwise use originalData
-	var valuesToProcess map[string]interface{}
-	if len(valuesData) > 0 && valuesData[0] != nil {
-		valuesToProcess = valuesData[0]
-	} else {
-		valuesToProcess = originalData
-	}
-
-	regularValues := make(map[string]interface{})
-	filesProcessed := 0
-
-	for key, value := range valuesToProcess {
-		// Skip metadata keys
-		if strings.HasSuffix(key, "_metadata") {
-			continue
-		}
-
-		handled, err := a.handleFileValue(originalData, opts, key, value)
-		if err != nil {
-			return err
-		}
-		if handled {
-			filesProcessed++
-			continue
-		}
-
-		regularValues[key] = value
-	}
-
-	// Output regular values if any exist
-	if len(regularValues) > 0 {
-		if opts.OutputJSON {
-			if err := utils.OutputJSON(regularValues); err != nil {
-				return fmt.Errorf("output json: %w", err)
-			}
-		} else {
-			utils.OutputEnvFormat(regularValues)
-		}
-	}
-
-	// Show summary if files were processed
-	if filesProcessed > 0 {
-		if len(regularValues) > 0 {
-			fmt.Printf("\nProcessed %d file(s) and %d regular value(s)\n", filesProcessed, len(regularValues))
-		} else {
-			fmt.Printf("Processed %d file(s)\n", filesProcessed)
-		}
-	}
-
-	return nil
-}
-
-// handleFileValue saves a value as a file when configuration or metadata indicates it should
-func (a *App) handleFileValue(originalData map[string]interface{}, opts *GetOptions, key string, value interface{}) (bool, error) {
-	if opts == nil {
-		return false, nil
-	}
-
-	fileOpts := a.resolveFileStorageOptions(originalData, opts, key)
-	if fileOpts == nil {
-		return false, nil
-	}
-
-	valueStr, ok := value.(string)
-	if !ok {
-		return true, fmt.Errorf("file content for %q is not a string", key)
-	}
-
-	if err := utils.SaveAsFileWithOptions(valueStr, *fileOpts); err != nil {
-		return true, err
-	}
-
-	return true, nil
-}
-
-// resolveFileStorageOptions determines file storage options for a key using config or metadata
-func (a *App) resolveFileStorageOptions(originalData map[string]interface{}, opts *GetOptions, key string) *utils.FileStorageOptions {
-	if opts.Config != nil && opts.KVPath != "" {
-		if configOpts := fileOptionsFromConfig(opts.Config, opts.KVPath, key); configOpts != nil {
-			return configOpts
-		}
-	}
-
-	if metadataOpts, ok := utils.FileOptionsFromMetadata(originalData, key); ok {
-		return metadataOpts
-	}
-
-	return nil
-}
-
-// fileOptionsFromConfig extracts file storage options for a key using the provided config
-func fileOptionsFromConfig(cfg *config.Config, kvPath, key string) *utils.FileStorageOptions {
-	for _, secret := range cfg.Secrets {
-		if secret.Path != kvPath || secret.Key != key {
-			continue
-		}
-		if !secret.IsFileEntry() {
-			continue
-		}
-
-		fileCfg := cfg.GetSecretFileConfig(&secret)
-		createDir := false
-		if fileCfg.CreateDir != nil {
-			createDir = *fileCfg.CreateDir
-		}
-
-		return &utils.FileStorageOptions{
-			Path:      fileCfg.Path,
-			Mode:      fileCfg.Mode,
-			CreateDir: createDir,
-		}
 	}
 
 	return nil

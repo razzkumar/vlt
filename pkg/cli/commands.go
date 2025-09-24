@@ -47,8 +47,9 @@ func getPutCommand() *cli.Command {
 				Usage: "Secret value (or use stdin)",
 			},
 			&cli.StringFlag{
-				Name:  "from-env",
-				Usage: "Load multiple key-value pairs from .env file",
+				Name:  "env-file",
+				Usage: "Load multiple key-value pairs from .env file (default: .env)",
+				Value: ".env",
 			},
 			&cli.StringFlag{
 				Name:  "from-file",
@@ -66,12 +67,13 @@ func getPutCommand() *cli.Command {
 			},
 		},
 		Action: func(ctx *cli.Context) error {
-			// Validate input options
+			// Validate input options - check if explicit inputs are provided
 			inputCount := 0
 			if ctx.String("value") != "" {
 				inputCount++
 			}
-			if ctx.String("from-env") != "" {
+			// Only count env-file as input if explicitly provided (not default)
+			if ctx.IsSet("env-file") {
 				inputCount++
 			}
 			if ctx.String("from-file") != "" {
@@ -79,12 +81,12 @@ func getPutCommand() *cli.Command {
 			}
 
 			if inputCount > 1 {
-				return fmt.Errorf("only one of --value, --from-env, or --from-file can be specified")
+				return fmt.Errorf("only one of --value, --env-file, or --from-file can be specified")
 			}
 
 			// Validate key update operation
-			if ctx.String("key") != "" && (ctx.String("from-env") != "" || ctx.String("from-file") != "") {
-				return fmt.Errorf("--key cannot be used with --from-env or --from-file")
+			if ctx.String("key") != "" && (ctx.IsSet("env-file") || ctx.String("from-file") != "") {
+				return fmt.Errorf("--key cannot be used with --env-file or --from-file")
 			}
 
 			appInstance, err := app.New()
@@ -92,6 +94,19 @@ func getPutCommand() *cli.Command {
 				return fmt.Errorf("failed to create app: %w", err)
 			}
 
+			// Determine env file to use
+			envFile := ""
+			// If no explicit input provided, use default .env file if it exists
+			if inputCount == 0 {
+				if _, err := os.Stat(".env"); err == nil {
+					envFile = ".env"
+				} else {
+					return fmt.Errorf("no input provided: specify --value, --env-file, --from-file, or create a .env file in the current directory")
+				}
+			} else if ctx.IsSet("env-file") {
+				envFile = ctx.String("env-file")
+			}
+			
 			opts := &app.PutOptions{
 				KVMount:       ctx.String("kv-mount"),
 				KVPath:        ctx.String("path"),
@@ -99,7 +114,7 @@ func getPutCommand() *cli.Command {
 				EncryptionKey: ctx.String("encryption-key"),
 				Key:           ctx.String("key"),
 				Value:         ctx.String("value"),
-				FromEnv:       ctx.String("from-env"),
+				FromEnv:       envFile,
 				FromFile:      ctx.String("from-file"),
 			}
 

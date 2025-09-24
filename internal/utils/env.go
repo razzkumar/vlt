@@ -159,48 +159,6 @@ func MergeData(existing, new map[string]any) map[string]any {
 	return result
 }
 
-// HasFileMetadata checks whether the given key is marked as a file entry via metadata
-func HasFileMetadata(data map[string]any, key string) bool {
-	_, ok := FileOptionsFromMetadata(data, key)
-	return ok
-}
-
-// FileOptionsFromMetadata returns file storage options derived from metadata if present
-func FileOptionsFromMetadata(data map[string]any, key string) (*FileStorageOptions, bool) {
-	metadataKey := key + "_metadata"
-	rawMetadata, exists := data[metadataKey]
-	if !exists {
-		return nil, false
-	}
-
-	metadataMap, ok := rawMetadata.(map[string]any)
-	if !ok {
-		return nil, false
-	}
-
-	fileType, ok := metadataMap["type"].(string)
-	if !ok || fileType != "file" {
-		return nil, false
-	}
-
-	opts := &FileStorageOptions{
-		Path:      key,
-		Mode:      "0644",
-		CreateDir: false,
-	}
-
-	if pathVal, ok := metadataMap["path"].(string); ok && pathVal != "" {
-		opts.Path = pathVal
-	}
-	if modeVal, ok := metadataMap["mode"].(string); ok && modeVal != "" {
-		opts.Mode = modeVal
-	}
-	if createDirVal, ok := metadataMap["create_dir"].(bool); ok {
-		opts.CreateDir = createDirVal
-	}
-
-	return opts, true
-}
 
 // FileStorageOptions holds options for file storage
 type FileStorageOptions struct {
@@ -219,13 +177,20 @@ func SaveAsFile(filename, base64Content string) error {
 	return SaveAsFileWithOptions(base64Content, opts)
 }
 
-// SaveAsFileWithOptions decodes base64 content and saves it as a file with configurable options
-func SaveAsFileWithOptions(base64Content string, opts FileStorageOptions) error {
-	decodedContent, err := base64.StdEncoding.DecodeString(base64Content)
-	if err != nil {
-		return fmt.Errorf("decode base64 content for %s: %w", opts.Path, err)
+// SaveAsFileWithOptions saves content to file with configurable options
+// Automatically detects if content is base64-encoded or plain text
+func SaveAsFileWithOptions(content string, opts FileStorageOptions) error {
+	var fileContent []byte
+	
+	// Try to decode as base64 first (for files uploaded with --from-file)
+	if decoded, err := base64.StdEncoding.DecodeString(content); err == nil {
+		// Successfully decoded as base64, use decoded content
+		fileContent = decoded
+	} else {
+		// Not valid base64, treat as plain text (for normal secret keys)
+		fileContent = []byte(content)
 	}
-
+	
 	// Create directory if needed
 	if opts.CreateDir {
 		dir := filepath.Dir(opts.Path)
@@ -233,14 +198,14 @@ func SaveAsFileWithOptions(base64Content string, opts FileStorageOptions) error 
 			return fmt.Errorf("create directory %s: %w", dir, err)
 		}
 	}
-
+	
 	// Parse file permissions
 	mode, err := parseFileMode(opts.Mode)
 	if err != nil {
 		return fmt.Errorf("invalid file mode %s: %w", opts.Mode, err)
 	}
-
-	if err := os.WriteFile(opts.Path, decodedContent, mode); err != nil {
+	
+	if err := os.WriteFile(opts.Path, fileContent, mode); err != nil {
 		return fmt.Errorf("write file %s: %w", opts.Path, err)
 	}
 
