@@ -15,7 +15,7 @@ func main() {
 		Usage: "Minimal secrets management with Vault (optionally with Transit encryption)",
 		Description: `vlt is a CLI tool for managing secrets with HashiCorp Vault using optional Transit encryption.
 It supports storing and retrieving single values or multiple key-value pairs, with smart merging capabilities.`,
-		Version: "2.0.0",
+		Version: "1.0.1",
 		Authors: []*cli.Author{
 			{
 				Name: "vlt contributors",
