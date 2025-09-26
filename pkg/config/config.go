@@ -57,6 +57,7 @@ type SecretFileConfig struct {
 // 3. Selective format: single key from path (path + key)
 // 4. Mapped format: single key from path with custom env name (path + key + env_key)
 // 5. File format: save key as file with file configuration (path + key + file)
+// 6. Directory format: save all keys as files in directory (path + dir)
 type SecretEntry struct {
 	// Old format - individual secret mapping
 	Name     string `yaml:"name,omitempty"`
@@ -71,6 +72,9 @@ type SecretEntry struct {
 
 	// File configuration - when this key should be saved as a file
 	File *SecretFileConfig `yaml:"file,omitempty"`
+	
+	// Directory configuration - when all keys should be saved as individual files
+	Dir string `yaml:"dir,omitempty"` // directory path to save all keys as individual files
 }
 
 // VaultConfig holds Vault client configuration
@@ -309,9 +313,19 @@ func (s *SecretEntry) IsFileEntry() bool {
 	return s.File != nil
 }
 
+// IsDirEntry returns true if all keys from this path should be saved as individual files in a directory
+func (s *SecretEntry) IsDirEntry() bool {
+	return s.Dir != ""
+}
+
 // RequiresKey returns true if this entry must have a key specified
 func (s *SecretEntry) RequiresKey() bool {
 	return s.IsFileEntry() // File entries always need a specific key
+}
+
+// HasFileOrDirConfig returns true if this entry has file or directory configuration
+func (s *SecretEntry) HasFileOrDirConfig() bool {
+	return s.IsFileEntry() || s.IsDirEntry()
 }
 
 // GetEnvKeyName returns the environment variable name for this secret
@@ -415,6 +429,28 @@ func (c *Config) GetSecretFileConfig(secretEntry *SecretEntry) SecretFileConfig 
 	}
 
 	return result
+}
+
+// GetDirFileConfig returns the file configuration for saving a key as a file in the specified directory
+func (c *Config) GetDirFileConfig(secretEntry *SecretEntry, keyName string) SecretFileConfig {
+	fileStorage := c.GetFileStorageConfig()
+	
+	// Expand the directory path
+	dirPath := expandPath(secretEntry.Dir, fileStorage.OutputDir)
+	
+	// Create file path using key name as filename
+	filePath := filepath.Join(dirPath, keyName)
+	
+	createDir := true
+	if fileStorage.CreateDirs != nil {
+		createDir = *fileStorage.CreateDirs
+	}
+	
+	return SecretFileConfig{
+		Path:      filePath,
+		Mode:      fileStorage.DefaultMode,
+		CreateDir: &createDir,
+	}
 }
 
 // expandPath expands ~ and resolves relative paths

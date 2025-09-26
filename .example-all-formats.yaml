@@ -126,3 +126,36 @@ secrets:
   - path: test/keys
     key: api_key.txt
     file: {}  # Uses defaults: ./test_files/api_key.txt with mode 0644
+
+---
+
+vault:
+  addr: "http://127.0.0.1:8200"
+
+kv:
+  mount: "kv"
+
+secrets:
+  # Example 1: Save all keys from creds/gpg as individual files in ~/gpg-keys directory
+  - path: creds/gpg
+    dir: ~/gpg-keys
+
+  # Example 2: Override specific file from the same path with custom configuration
+  - path: creds/gpg
+    key: ownertrust.txt
+    file:
+      path: "~/gpg-keys/ownertrust.txt"
+      mode: "0600"
+      create_dir: true
+
+  # Example 3: Another directory example - save all database configs as files
+  - path: configs/database
+    dir: /tmp/db-configs
+
+  # Example 4: Regular environment variables (not files)
+  - path: app/settings
+    key: api_key
+    env_key: API_KEY
+
+  # Example 5: Load all keys as environment variables
+  - path: app/general

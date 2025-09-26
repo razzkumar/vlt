@@ -66,7 +66,13 @@ func (a *App) loadSecretsFromConfig(cfg *config.Config, kvMount, transitMount, e
 	envVars := make(map[string]string)
 
 	for _, secret := range cfg.Secrets {
-		if secret.IsPathAllKeys() {
+		if secret.IsDirEntry() {
+			// Directory format: save all keys from path as individual files in directory
+			if err := a.handleDirEntry(cfg, &secret, kvMount, transitMount, encryptionKey); err != nil {
+				return nil, fmt.Errorf("failed to save directory files for path %s: %w", secret.Path, err)
+			}
+			// Don't add to envVars since they're files
+		} else if secret.IsPathAllKeys() {
 			// New format: load all keys from a path as environment variables
 			pathEnvVars, err := a.loadAllKeysFromPath(cfg, secret.Path, kvMount, transitMount, encryptionKey)
 			if err != nil {
@@ -251,4 +257,86 @@ func (a *App) handleFileEntry(cfg *config.Config, secret *config.SecretEntry, kv
 	
 	// Save the file
 	return utils.SaveAsFileWithOptions(secretValue, storageOpts)
+}
+
+// handleDirEntry processes a directory entry from the config and saves all keys as individual files
+func (a *App) handleDirEntry(cfg *config.Config, secret *config.SecretEntry, kvMount, transitMount, encryptionKey string) error {
+	// Get all data from the Vault path
+	data, err := a.vaultClient.KVGet(config.NonEmpty("", cfg.KV.Mount, kvMount), secret.Path)
+	if err != nil {
+		return fmt.Errorf("failed to get secrets from path %s: %w", secret.Path, err)
+	}
+
+	var keysToSave map[string]interface{}
+
+	// Handle encrypted multi-value data
+	if utils.IsEncryptedMultiValue(data) {
+		encKeyForDecrypt := config.NonEmpty(encryptionKey, cfg.GetTransitKey(), "")
+		if encKeyForDecrypt == "" {
+			return fmt.Errorf("encryption key required for encrypted secrets at path %s", secret.Path)
+		}
+
+		decryptedData, err := utils.DecryptMultiValueData(data, a.vaultClient, cfg.GetTransitMount(transitMount), encKeyForDecrypt)
+		if err != nil {
+			return fmt.Errorf("failed to decrypt secrets from path %s: %w", secret.Path, err)
+		}
+		keysToSave = decryptedData
+	} else {
+		// Handle plaintext data
+		keysToSave = make(map[string]interface{})
+		for key, value := range data {
+			// Skip common metadata keys but include everything else
+			if key != "ciphertext" {
+				keysToSave[key] = value
+			}
+		}
+		
+		// Handle single value case
+		if len(keysToSave) == 0 {
+			if value, ok := data["value"]; ok {
+				// Use path name as filename
+				pathParts := strings.Split(secret.Path, "/")
+				keyName := pathParts[len(pathParts)-1]
+				keysToSave[keyName] = value
+			}
+		}
+	}
+
+	if len(keysToSave) == 0 {
+		return fmt.Errorf("no valid secrets found at path %s", secret.Path)
+	}
+
+	// Save each key as a file in the directory
+	for keyName, value := range keysToSave {
+		// Check if this key has a specific file configuration that overrides directory
+		hasSpecificFileConfig := false
+		for _, otherSecret := range cfg.Secrets {
+			if otherSecret.Path == secret.Path && otherSecret.Key == keyName && otherSecret.IsFileEntry() {
+				// This key has its own file config, skip it here
+				hasSpecificFileConfig = true
+				break
+			}
+		}
+		
+		if hasSpecificFileConfig {
+			continue // Skip this key as it's handled by its own file configuration
+		}
+		
+		// Get directory file configuration for this key
+		fileConfig := cfg.GetDirFileConfig(secret, keyName)
+		
+		// Convert to utils.FileStorageOptions
+		storageOpts := utils.FileStorageOptions{
+			Path:      fileConfig.Path,
+			Mode:      fileConfig.Mode,
+			CreateDir: *fileConfig.CreateDir,
+		}
+		
+		// Save the file
+		if err := utils.SaveAsFileWithOptions(fmt.Sprintf("%v", value), storageOpts); err != nil {
+			return fmt.Errorf("failed to save key %s as file %s: %w", keyName, fileConfig.Path, err)
+		}
+	}
+
+	return nil
 }
