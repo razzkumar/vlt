@@ -16,6 +16,10 @@ func GetCommands() []*cli.Command {
 	return []*cli.Command{
 		getPutCommand(),
 		getGetCommand(),
+		getDeleteCommand(),
+		getListCommand(),
+		getExportCommand(),
+		getImportCommand(),
 		getSyncCommand(),
 		getRunCommand(),
 		getJSONCommand(),
@@ -64,6 +68,14 @@ func getPutCommand() *cli.Command {
 				Name:  "transit-mount",
 				Usage: "Transit mount path",
 				Value: "transit",
+			},
+			&cli.BoolFlag{
+				Name:  "force",
+				Usage: "Overwrite existing data instead of merging",
+			},
+			&cli.BoolFlag{
+				Name:  "dry-run",
+				Usage: "Show what would be done without making changes",
 			},
 		},
 		Action: func(ctx *cli.Context) error {
@@ -116,6 +128,8 @@ func getPutCommand() *cli.Command {
 				Value:         ctx.String("value"),
 				FromEnv:       envFile,
 				FromFile:      ctx.String("from-file"),
+				Force:         ctx.Bool("force"),
+				DryRun:        ctx.Bool("dry-run"),
 			}
 
 			return appInstance.Put(opts)
@@ -176,6 +190,14 @@ Examples:
 				Usage: "Transit mount path",
 				Value: "transit",
 			},
+			&cli.BoolFlag{
+				Name:  "raw",
+				Usage: "Output raw value without newline",
+			},
+			&cli.StringFlag{
+				Name:  "default",
+				Usage: "Default value if secret not found",
+			},
 		},
 		Action: func(ctx *cli.Context) error {
 			// Check for default config file if neither path nor config specified
@@ -220,10 +242,267 @@ Examples:
 					EncryptionKey: ctx.String("encryption-key"),
 					Key:           ctx.String("key"),
 					OutputJSON:    ctx.Bool("json"),
+					Raw:           ctx.Bool("raw"),
+					Default:       ctx.String("default"),
 					Config:        cfg,
 				}
 				return appInstance.Get(opts)
 			}
+		},
+	}
+}
+
+func getDeleteCommand() *cli.Command {
+	return &cli.Command{
+		Name:    "delete",
+		Usage:   "Delete a secret from Vault",
+		Aliases: []string{"d", "rm"},
+		Description: `Delete a secret from Vault's KV v2 secrets engine.
+
+Examples:
+  # Delete a secret
+  vlt delete --path secrets/myapp/config
+
+  # Delete with custom KV mount
+  vlt delete --path myapp/config --kv-mount secret`,
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:     "path",
+				Usage:    "KV path of secret to delete",
+				Required: true,
+			},
+			&cli.StringFlag{
+				Name:  "kv-mount",
+				Usage: "KV v2 mount path",
+				Value: "home",
+			},
+		},
+		Action: func(ctx *cli.Context) error {
+			appInstance, err := app.New()
+			if err != nil {
+				return fmt.Errorf("failed to create app: %w", err)
+			}
+
+			opts := &app.DeleteOptions{
+				KVMount: ctx.String("kv-mount"),
+				Path:    ctx.String("path"),
+			}
+
+			if err := appInstance.Delete(opts); err != nil {
+				return err
+			}
+
+			fmt.Fprintf(os.Stderr, "Secret deleted: %s\n", opts.Path)
+			return nil
+		},
+	}
+}
+
+func getListCommand() *cli.Command {
+	return &cli.Command{
+		Name:    "list",
+		Usage:   "List secrets at a path in Vault",
+		Aliases: []string{"ls"},
+		Description: `List secrets at a path in Vault's KV v2 secrets engine.
+
+Directories are indicated with a trailing slash.
+
+Examples:
+  # List secrets at root
+  vlt list
+
+  # List secrets at a path
+  vlt list --path secrets/myapp
+
+  # List with custom KV mount
+  vlt list --path myapp --kv-mount secret`,
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:  "path",
+				Usage: "KV path to list (default: root)",
+			},
+			&cli.StringFlag{
+				Name:  "kv-mount",
+				Usage: "KV v2 mount path",
+				Value: "home",
+			},
+		},
+		Action: func(ctx *cli.Context) error {
+			appInstance, err := app.New()
+			if err != nil {
+				return fmt.Errorf("failed to create app: %w", err)
+			}
+
+			opts := &app.ListOptions{
+				KVMount: ctx.String("kv-mount"),
+				Path:    ctx.String("path"),
+			}
+
+			keys, err := appInstance.List(opts)
+			if err != nil {
+				return err
+			}
+
+			if len(keys) == 0 {
+				fmt.Fprintf(os.Stderr, "No secrets found at path: %s\n", opts.Path)
+				return nil
+			}
+
+			for _, key := range keys {
+				fmt.Println(key)
+			}
+			return nil
+		},
+	}
+}
+
+func getExportCommand() *cli.Command {
+	return &cli.Command{
+		Name:    "export",
+		Usage:   "Export secrets from Vault to a file",
+		Aliases: []string{"exp"},
+		Description: `Export secrets from Vault to a file in JSON or .env format.
+
+Examples:
+  # Export as JSON to stdout
+  vlt export --path secrets/myapp
+
+  # Export as JSON to file
+  vlt export --path secrets/myapp --output secrets.json
+
+  # Export as .env format
+  vlt export --path secrets/myapp --format env --output .env
+
+  # Export with decryption
+  vlt export --path secrets/myapp --encryption-key mykey --output secrets.json`,
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:     "path",
+				Usage:    "KV path to export",
+				Required: true,
+			},
+			&cli.StringFlag{
+				Name:  "output",
+				Usage: "Output file path (default: stdout)",
+				Value: "-",
+			},
+			&cli.StringFlag{
+				Name:  "format",
+				Usage: "Output format: json or env",
+				Value: "json",
+			},
+			&cli.StringFlag{
+				Name:  "encryption-key",
+				Usage: "Transit encryption key for decryption",
+			},
+			&cli.StringFlag{
+				Name:  "kv-mount",
+				Usage: "KV v2 mount path",
+				Value: "home",
+			},
+			&cli.StringFlag{
+				Name:  "transit-mount",
+				Usage: "Transit mount path",
+				Value: "transit",
+			},
+		},
+		Action: func(ctx *cli.Context) error {
+			appInstance, err := app.New()
+			if err != nil {
+				return fmt.Errorf("failed to create app: %w", err)
+			}
+
+			opts := &app.ExportOptions{
+				KVMount:       ctx.String("kv-mount"),
+				Path:          ctx.String("path"),
+				TransitMount:  ctx.String("transit-mount"),
+				EncryptionKey: ctx.String("encryption-key"),
+				Output:        ctx.String("output"),
+				Format:        ctx.String("format"),
+			}
+
+			return appInstance.Export(opts)
+		},
+	}
+}
+
+func getImportCommand() *cli.Command {
+	return &cli.Command{
+		Name:    "import",
+		Usage:   "Import secrets from a file to Vault",
+		Aliases: []string{"imp"},
+		Description: `Import secrets from a JSON or .env file to Vault.
+
+The format is auto-detected based on file extension (.json or .env) or content.
+
+Examples:
+  # Import from JSON file
+  vlt import --path secrets/myapp --input secrets.json
+
+  # Import from .env file
+  vlt import --path secrets/myapp --input .env
+
+  # Import with encryption
+  vlt import --path secrets/myapp --input secrets.json --encryption-key mykey
+
+  # Import and merge with existing secrets
+  vlt import --path secrets/myapp --input new-secrets.json --merge`,
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:     "path",
+				Usage:    "KV path to import to",
+				Required: true,
+			},
+			&cli.StringFlag{
+				Name:     "input",
+				Usage:    "Input file path",
+				Required: true,
+			},
+			&cli.StringFlag{
+				Name:  "format",
+				Usage: "Input format: json or env (auto-detected if not specified)",
+			},
+			&cli.StringFlag{
+				Name:  "encryption-key",
+				Usage: "Transit encryption key for encryption",
+			},
+			&cli.BoolFlag{
+				Name:  "merge",
+				Usage: "Merge with existing secrets instead of replacing",
+			},
+			&cli.StringFlag{
+				Name:  "kv-mount",
+				Usage: "KV v2 mount path",
+				Value: "home",
+			},
+			&cli.StringFlag{
+				Name:  "transit-mount",
+				Usage: "Transit mount path",
+				Value: "transit",
+			},
+		},
+		Action: func(ctx *cli.Context) error {
+			appInstance, err := app.New()
+			if err != nil {
+				return fmt.Errorf("failed to create app: %w", err)
+			}
+
+			opts := &app.ImportOptions{
+				KVMount:       ctx.String("kv-mount"),
+				Path:          ctx.String("path"),
+				TransitMount:  ctx.String("transit-mount"),
+				EncryptionKey: ctx.String("encryption-key"),
+				Input:         ctx.String("input"),
+				Format:        ctx.String("format"),
+				Merge:         ctx.Bool("merge"),
+			}
+
+			if err := appInstance.Import(opts); err != nil {
+				return err
+			}
+
+			fmt.Fprintf(os.Stderr, "Imported to: %s\n", opts.Path)
+			return nil
 		},
 	}
 }
@@ -328,6 +607,14 @@ First found config will be used automatically if no --config is specified.`,
 				Usage: "Preserve all current environment variables (default: true)",
 				Value: true,
 			},
+			&cli.BoolFlag{
+				Name:  "strict",
+				Usage: "Fail if any secret cannot be loaded",
+			},
+			&cli.StringFlag{
+				Name:  "prefix",
+				Usage: "Prefix to add to all injected environment variable names",
+			},
 		},
 		Action: func(ctx *cli.Context) error {
 			// Check for default config file if none specified and no inject flags provided
@@ -366,6 +653,8 @@ First found config will be used automatically if no --config is specified.`,
 				PreserveEnv:   ctx.Bool("preserve-env"),
 				Command:       args[0],
 				Args:          args[1:],
+				Strict:        ctx.Bool("strict"),
+				Prefix:        ctx.String("prefix"),
 			}
 
 			return appInstance.Run(opts)

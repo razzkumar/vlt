@@ -169,6 +169,52 @@ func (c *Client) KVGet(mount, path string) (map[string]interface{}, error) {
 	return inner, nil
 }
 
+// KVDelete deletes a secret from Vault's KV v2 secrets engine
+func (c *Client) KVDelete(mount, path string) error {
+	apiPath := fmt.Sprintf("%s/data/%s", strings.TrimSuffix(mount, "/"), strings.TrimPrefix(path, "/"))
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(c.config.Timeout)*time.Second)
+	defer cancel()
+
+	_, err := c.client.Logical().DeleteWithContext(ctx, apiPath)
+	if err != nil {
+		return fmt.Errorf("kv delete failed: %w", err)
+	}
+
+	return nil
+}
+
+// KVList lists secrets at a path in Vault's KV v2 secrets engine
+func (c *Client) KVList(mount, path string) ([]string, error) {
+	apiPath := fmt.Sprintf("%s/metadata/%s", strings.TrimSuffix(mount, "/"), strings.TrimPrefix(path, "/"))
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(c.config.Timeout)*time.Second)
+	defer cancel()
+
+	secret, err := c.client.Logical().ListWithContext(ctx, apiPath)
+	if err != nil {
+		return nil, fmt.Errorf("kv list failed: %w", err)
+	}
+
+	if secret == nil || secret.Data == nil {
+		return []string{}, nil
+	}
+
+	keys, ok := secret.Data["keys"].([]interface{})
+	if !ok {
+		return []string{}, nil
+	}
+
+	result := make([]string, 0, len(keys))
+	for _, k := range keys {
+		if s, ok := k.(string); ok {
+			result = append(result, s)
+		}
+	}
+
+	return result, nil
+}
+
 // authenticateVault performs authentication based on the configured method
 func authenticateVault(client *vaultapi.Client, cfg *config.VaultConfig) (string, error) {
 	switch cfg.AuthMethod {

@@ -13,6 +13,12 @@ type VaultClient interface {
 
 	// KVGet retrieves data from Vault's KV v2 secrets engine
 	KVGet(mount, path string) (map[string]interface{}, error)
+
+	// KVDelete deletes a secret from Vault's KV v2 secrets engine
+	KVDelete(mount, path string) error
+
+	// KVList lists secrets at a path in Vault's KV v2 secrets engine
+	KVList(mount, path string) ([]string, error)
 }
 
 // Compile-time check that Client implements VaultClient

@@ -16,6 +16,10 @@ type GetOptions struct {
 	EncryptionKey string
 	Key           string
 	OutputJSON    bool
+	// Raw outputs the value without any formatting or newlines
+	Raw bool
+	// Default is the value to return if the secret is not found
+	Default string
 	// Config holds the loaded configuration for file storage settings
 	Config *config.Config
 }
@@ -37,6 +41,11 @@ func (a *App) Get(opts *GetOptions) error {
 	// Get from KV
 	data, err := a.vaultClient.KVGet(opts.KVMount, opts.KVPath)
 	if err != nil {
+		// If we have a default value, use it instead of failing
+		if opts.Default != "" {
+			a.outputValue(opts.Default, opts.Raw)
+			return nil
+		}
 		return fmt.Errorf("kv get: %w", err)
 	}
 
@@ -51,7 +60,7 @@ func (a *App) Get(opts *GetOptions) error {
 		if err != nil {
 			return fmt.Errorf("transit decrypt: %w", err)
 		}
-		fmt.Print(string(plaintext))
+		a.outputValue(string(plaintext), opts.Raw)
 		return nil
 	}
 
@@ -69,9 +78,13 @@ func (a *App) Get(opts *GetOptions) error {
 		if opts.Key != "" {
 			value, ok := decryptedData[opts.Key]
 			if !ok {
+				if opts.Default != "" {
+					a.outputValue(opts.Default, opts.Raw)
+					return nil
+				}
 				return fmt.Errorf("key %q not found", opts.Key)
 			}
-			fmt.Print(value)
+			a.outputValue(fmt.Sprintf("%v", value), opts.Raw)
 			return nil
 		}
 
@@ -85,16 +98,20 @@ func (a *App) Get(opts *GetOptions) error {
 	if opts.Key != "" {
 		value, ok := data[opts.Key]
 		if !ok {
+			if opts.Default != "" {
+				a.outputValue(opts.Default, opts.Raw)
+				return nil
+			}
 			return fmt.Errorf("key %q not found", opts.Key)
 		}
-		fmt.Print(value)
+		a.outputValue(fmt.Sprintf("%v", value), opts.Raw)
 		return nil
 	}
 
 	if len(data) == 1 {
 		// Single plaintext value
 		if value, ok := data["value"].(string); ok {
-			fmt.Print(value)
+			a.outputValue(value, opts.Raw)
 			return nil
 		}
 	}
@@ -105,6 +122,15 @@ func (a *App) Get(opts *GetOptions) error {
 	}
 
 	return nil
+}
+
+// outputValue outputs a single value, optionally in raw format
+func (a *App) outputValue(value string, raw bool) {
+	if raw {
+		fmt.Print(value)
+	} else {
+		fmt.Println(value)
+	}
 }
 
 // handleMultipleValues processes multiple values and outputs them

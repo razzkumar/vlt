@@ -20,6 +20,7 @@ func TestLoadInlineSecrets(t *testing.T) {
 		"kv",
 		"transit",
 		"",
+		true, // strict mode
 	)
 
 	if err != nil {
@@ -44,6 +45,7 @@ func TestLoadInlineSecrets_InvalidFormat(t *testing.T) {
 		"kv",
 		"transit",
 		"",
+		true, // strict mode
 	)
 
 	if err == nil {
@@ -60,6 +62,7 @@ func TestLoadInlineSecrets_EmptyEnvVar(t *testing.T) {
 		"kv",
 		"transit",
 		"",
+		true,
 	)
 
 	if err == nil {
@@ -76,6 +79,7 @@ func TestLoadInlineSecrets_EmptyPath(t *testing.T) {
 		"kv",
 		"transit",
 		"",
+		true,
 	)
 
 	if err == nil {
@@ -95,6 +99,7 @@ func TestLoadInlineSecrets_EncryptedValue(t *testing.T) {
 		"kv",
 		"transit",
 		"my-key",
+		true,
 	)
 
 	if err != nil {
@@ -117,6 +122,7 @@ func TestLoadInlineSecrets_EncryptedWithoutKey(t *testing.T) {
 		"kv",
 		"transit",
 		"", // No encryption key
+		true,
 	)
 
 	if err == nil {
@@ -138,6 +144,7 @@ func TestLoadInlineSecrets_MultiValueError(t *testing.T) {
 		"kv",
 		"transit",
 		"",
+		true,
 	)
 
 	if err == nil {
@@ -158,6 +165,7 @@ func TestLoadInlineSecrets_SingleKeySecret(t *testing.T) {
 		"kv",
 		"transit",
 		"",
+		true,
 	)
 
 	if err != nil {
@@ -268,6 +276,7 @@ func TestRun_VaultError(t *testing.T) {
 		KVMount:       "kv",
 		InjectSecrets: []string{"SECRET=app/nonexistent"},
 		DryRun:        true,
+		Strict:        true, // Use strict mode to ensure error is returned
 		Command:       "echo",
 		Args:          []string{"hello"},
 	})

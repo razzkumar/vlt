@@ -823,3 +823,254 @@ func TestConfig_GetFileStorageConfig(t *testing.T) {
 		}
 	})
 }
+
+func TestConfig_Validate(t *testing.T) {
+	tests := []struct {
+		name    string
+		cfg     *Config
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name: "valid config with path-based secrets",
+			cfg: &Config{
+				Secrets: []SecretEntry{
+					{Path: "secret/data/app"},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid config with individual secrets",
+			cfg: &Config{
+				Secrets: []SecretEntry{
+					{KVPath: "app/config", EnvVar: "CONFIG"},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name:    "empty secrets",
+			cfg:     &Config{},
+			wantErr: true,
+			errMsg:  "no secrets defined",
+		},
+		{
+			name: "invalid secret entry",
+			cfg: &Config{
+				Secrets: []SecretEntry{
+					{Path: "secret/data/app", KVPath: "app/config"},
+				},
+			},
+			wantErr: true,
+			errMsg:  "cannot mix",
+		},
+		{
+			name: "invalid file mode in files config",
+			cfg: &Config{
+				Files: &FileStorageConfig{
+					DefaultMode: "invalid",
+				},
+				Secrets: []SecretEntry{
+					{Path: "secret/data/app"},
+				},
+			},
+			wantErr: true,
+			errMsg:  "files.default_mode",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.cfg.Validate()
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("expected error, got nil")
+					return
+				}
+				if tt.errMsg != "" && !containsString(err.Error(), tt.errMsg) {
+					t.Errorf("error %q should contain %q", err.Error(), tt.errMsg)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestSecretEntry_Validate(t *testing.T) {
+	tests := []struct {
+		name    string
+		entry   SecretEntry
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name:    "valid path-based all keys",
+			entry:   SecretEntry{Path: "secret/data/app"},
+			wantErr: false,
+		},
+		{
+			name:    "valid path-based single key",
+			entry:   SecretEntry{Path: "secret/data/app", Key: "api_key"},
+			wantErr: false,
+		},
+		{
+			name:    "valid path-based with env_key",
+			entry:   SecretEntry{Path: "secret/data/app", Key: "api_key", EnvKey: "MY_API_KEY"},
+			wantErr: false,
+		},
+		{
+			name:    "valid individual format",
+			entry:   SecretEntry{KVPath: "app/config", EnvVar: "CONFIG"},
+			wantErr: false,
+		},
+		{
+			name: "valid file entry",
+			entry: SecretEntry{
+				Path: "secret/data/app",
+				Key:  "cert",
+				File: &SecretFileConfig{Path: "/tmp/cert.pem"},
+			},
+			wantErr: false,
+		},
+		{
+			name:    "valid dir entry",
+			entry:   SecretEntry{Path: "secret/data/certs", Dir: "/tmp/certs"},
+			wantErr: false,
+		},
+		{
+			name:    "mix old and new format",
+			entry:   SecretEntry{Path: "secret/data/app", KVPath: "app/config"},
+			wantErr: true,
+			errMsg:  "cannot mix",
+		},
+		{
+			name:    "neither format specified",
+			entry:   SecretEntry{},
+			wantErr: true,
+			errMsg:  "either 'path' or 'kv_path'",
+		},
+		{
+			name:    "old format missing kv_path",
+			entry:   SecretEntry{EnvVar: "CONFIG"},
+			wantErr: true,
+			errMsg:  "kv_path is required",
+		},
+		{
+			name:    "old format missing env_var",
+			entry:   SecretEntry{KVPath: "app/config"},
+			wantErr: true,
+			errMsg:  "env_var is required",
+		},
+		{
+			name:    "env_key without key",
+			entry:   SecretEntry{Path: "secret/data/app", EnvKey: "MY_KEY"},
+			wantErr: true,
+			errMsg:  "env_key requires 'key'",
+		},
+		{
+			name: "file without key",
+			entry: SecretEntry{
+				Path: "secret/data/app",
+				File: &SecretFileConfig{Path: "/tmp/cert.pem"},
+			},
+			wantErr: true,
+			errMsg:  "file output requires 'key'",
+		},
+		{
+			name: "file and dir both specified",
+			entry: SecretEntry{
+				Path: "secret/data/app",
+				Key:  "cert",
+				File: &SecretFileConfig{Path: "/tmp/cert.pem"},
+				Dir:  "/tmp/certs",
+			},
+			wantErr: true,
+			errMsg:  "cannot specify both 'file' and 'dir'",
+		},
+		{
+			name: "invalid file mode",
+			entry: SecretEntry{
+				Path: "secret/data/app",
+				Key:  "cert",
+				File: &SecretFileConfig{Path: "/tmp/cert.pem", Mode: "999"},
+			},
+			wantErr: true,
+			errMsg:  "file.mode",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.entry.Validate()
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("expected error, got nil")
+					return
+				}
+				if tt.errMsg != "" && !containsString(err.Error(), tt.errMsg) {
+					t.Errorf("error %q should contain %q", err.Error(), tt.errMsg)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestValidateFileMode(t *testing.T) {
+	tests := []struct {
+		mode    string
+		wantErr bool
+	}{
+		{"0644", false},
+		{"0755", false},
+		{"0600", false},
+		{"644", false},
+		{"755", false},
+		{"0777", false},
+		{"1755", false}, // with sticky bit
+		{"", true},
+		{"invalid", true},
+		{"0999", true},   // invalid octal
+		{"08", true},     // too short
+		{"01234567", true}, // too long
+	}
+
+	for _, tt := range tests {
+		t.Run("mode="+tt.mode, func(t *testing.T) {
+			err := validateFileMode(tt.mode)
+
+			if tt.wantErr && err == nil {
+				t.Errorf("expected error for mode %q", tt.mode)
+			}
+			if !tt.wantErr && err != nil {
+				t.Errorf("unexpected error for mode %q: %v", tt.mode, err)
+			}
+		})
+	}
+}
+
+// containsString is a helper to check if a string contains a substring
+func containsString(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
+		(len(s) > 0 && len(substr) > 0 && findSubstring(s, substr)))
+}
+
+func findSubstring(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}

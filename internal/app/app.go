@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 
+	"github.com/razzkumar/vlt/internal/utils"
 	"github.com/razzkumar/vlt/pkg/config"
 	"github.com/razzkumar/vlt/pkg/vault"
 )
@@ -17,7 +18,7 @@ func New() (*App, error) {
 	vaultConfig := config.GetVaultConfigFromEnv()
 	client, err := vault.NewClient(vaultConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create vault client: %w", err)
+		return nil, utils.EnhanceError(fmt.Errorf("failed to create vault client: %w", err))
 	}
 
 	return &App{
@@ -38,7 +39,7 @@ func NewWithOverrides(overrides *config.VaultConfigOverrides) (*App, error) {
 	vaultConfig := config.GetVaultConfigWithOverrides(overrides)
 	client, err := vault.NewClient(vaultConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create vault client: %w", err)
+		return nil, utils.EnhanceError(fmt.Errorf("failed to create vault client: %w", err))
 	}
 
 	return &App{

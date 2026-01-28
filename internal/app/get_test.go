@@ -36,8 +36,8 @@ func TestAppGet_PlaintextSingleValue(t *testing.T) {
 	io.Copy(&buf, r)
 	output := buf.String()
 
-	if output != "my-secret-value" {
-		t.Errorf("expected 'my-secret-value', got %q", output)
+	if output != "my-secret-value\n" {
+		t.Errorf("expected 'my-secret-value\\n', got %q", output)
 	}
 
 	// Verify KVGet was called
@@ -76,8 +76,8 @@ func TestAppGet_EncryptedSingleValue(t *testing.T) {
 	io.Copy(&buf, r)
 	output := buf.String()
 
-	if output != "my-secret" {
-		t.Errorf("expected 'my-secret', got %q", output)
+	if output != "my-secret\n" {
+		t.Errorf("expected 'my-secret\\n', got %q", output)
 	}
 
 	// Verify TransitDecrypt was called
@@ -154,8 +154,8 @@ func TestAppGet_SpecificKey(t *testing.T) {
 	io.Copy(&buf, r)
 	output := buf.String()
 
-	if output != "localhost" {
-		t.Errorf("expected 'localhost', got %q", output)
+	if output != "localhost\n" {
+		t.Errorf("expected 'localhost\\n', got %q", output)
 	}
 }
 
@@ -213,8 +213,8 @@ func TestAppGet_EncryptedMultiValue(t *testing.T) {
 	io.Copy(&buf, r)
 	output := buf.String()
 
-	if output != "secret-key" {
-		t.Errorf("expected 'secret-key', got %q", output)
+	if output != "secret-key\n" {
+		t.Errorf("expected 'secret-key\\n', got %q", output)
 	}
 }
 

@@ -21,6 +21,10 @@ type PutOptions struct {
 	Value         string
 	FromEnv       string
 	FromFile      string
+	// Force overwrites existing data instead of merging
+	Force bool
+	// DryRun shows what would be done without making changes
+	DryRun bool
 }
 
 // Put stores secrets in Vault with optional encryption
@@ -38,23 +42,29 @@ func (a *App) Put(opts *PutOptions) error {
 	effectiveEncryptionKey := config.GetEncryptionKey(opts.EncryptionKey)
 	useEncryption := effectiveEncryptionKey != ""
 
-	// Get existing data to merge with
-	existingData, err := a.vaultClient.KVGet(opts.KVMount, opts.KVPath)
-	if err != nil {
-		// If secret doesn't exist, start with empty data
-		existingData = make(map[string]interface{})
-	}
-
 	var finalData map[string]interface{}
 
-	// Handle different data structures in existing data
-	if utils.IsEncryptedSingleValue(existingData) || utils.IsPlaintextSingleValue(existingData) {
+	if opts.Force {
+		// Force mode: start fresh, don't merge with existing
 		finalData = make(map[string]interface{})
 	} else {
-		finalData = utils.MergeData(make(map[string]interface{}), existingData)
+		// Get existing data to merge with
+		existingData, err := a.vaultClient.KVGet(opts.KVMount, opts.KVPath)
+		if err != nil {
+			// If secret doesn't exist, start with empty data
+			existingData = make(map[string]interface{})
+		}
+
+		// Handle different data structures in existing data
+		if utils.IsEncryptedSingleValue(existingData) || utils.IsPlaintextSingleValue(existingData) {
+			finalData = make(map[string]interface{})
+		} else {
+			finalData = utils.MergeData(make(map[string]interface{}), existingData)
+		}
 	}
 
 	var newData map[string]interface{}
+	var err error
 
 	if opts.FromEnv != "" {
 		// Load from .env file
@@ -137,13 +147,24 @@ func (a *App) Put(opts *PutOptions) error {
 		}
 	}
 
-	if err := a.vaultClient.KVPut(opts.KVMount, opts.KVPath, finalData); err != nil {
-		return fmt.Errorf("kv put: %w", err)
-	}
-
 	encryptionStatus := "plaintext"
 	if useEncryption {
 		encryptionStatus = "encrypted"
+	}
+
+	if opts.DryRun {
+		// Dry run: show what would be done without making changes
+		fmt.Fprintf(os.Stderr, "[DRY RUN] Would store to: %s/%s\n", opts.KVMount, opts.KVPath)
+		fmt.Fprintf(os.Stderr, "[DRY RUN] Encryption: %s\n", encryptionStatus)
+		fmt.Fprintf(os.Stderr, "[DRY RUN] Keys to store:\n")
+		for key := range finalData {
+			fmt.Fprintf(os.Stderr, "  - %s\n", key)
+		}
+		return nil
+	}
+
+	if err := a.vaultClient.KVPut(opts.KVMount, opts.KVPath, finalData); err != nil {
+		return fmt.Errorf("kv put: %w", err)
 	}
 
 	if opts.Key != "" {

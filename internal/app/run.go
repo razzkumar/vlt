@@ -24,6 +24,10 @@ type RunOptions struct {
 	PreserveEnv   bool     // Preserve current environment
 	Command       string   // Command to execute
 	Args          []string // Arguments for the command
+	// Strict fails the command if any secret cannot be loaded
+	Strict bool
+	// Prefix adds a prefix to all injected environment variable names
+	Prefix string
 }
 
 // Run executes a command with secrets injected as environment variables
@@ -61,21 +65,35 @@ func (a *App) Run(opts *RunOptions) error {
 
 		configEnvVars, err := a.loadSecretsFromConfig(cfg, opts.KVMount, opts.TransitMount, effectiveEncryptionKey)
 		if err != nil {
-			return fmt.Errorf("load secrets from config: %w", err)
+			if opts.Strict {
+				return fmt.Errorf("load secrets from config: %w", err)
+			}
+			fmt.Fprintf(os.Stderr, "warning: some secrets could not be loaded: %v\n", err)
 		}
 		for k, v := range configEnvVars {
-			envVars[k] = v
+			key := k
+			if opts.Prefix != "" {
+				key = opts.Prefix + k
+			}
+			envVars[key] = v
 		}
 	}
 
 	// Load inline injected secrets
 	if len(opts.InjectSecrets) > 0 {
-		injectEnvVars, err := a.loadInlineSecrets(opts.InjectSecrets, opts.KVMount, opts.TransitMount, effectiveEncryptionKey)
+		injectEnvVars, err := a.loadInlineSecrets(opts.InjectSecrets, opts.KVMount, opts.TransitMount, effectiveEncryptionKey, opts.Strict)
 		if err != nil {
-			return fmt.Errorf("load inline secrets: %w", err)
+			if opts.Strict {
+				return fmt.Errorf("load inline secrets: %w", err)
+			}
+			fmt.Fprintf(os.Stderr, "warning: some inline secrets could not be loaded: %v\n", err)
 		}
 		for k, v := range injectEnvVars {
-			envVars[k] = v
+			key := k
+			if opts.Prefix != "" {
+				key = opts.Prefix + k
+			}
+			envVars[key] = v
 		}
 	}
 
@@ -104,14 +122,19 @@ func (a *App) loadEnvFileForRun(path string) (map[string]string, error) {
 }
 
 // loadInlineSecrets loads secrets specified via --inject flags
-func (a *App) loadInlineSecrets(injectSecrets []string, kvMount, transitMount, encryptionKey string) (map[string]string, error) {
+func (a *App) loadInlineSecrets(injectSecrets []string, kvMount, transitMount, encryptionKey string, strict bool) (map[string]string, error) {
 	envVars := make(map[string]string)
+	var lastErr error
 
 	for _, inject := range injectSecrets {
 		// Validate and parse ENV_VAR=vault_path format
 		envVar, vaultPath, err := config.ValidateInjectFormat(inject)
 		if err != nil {
-			return nil, err
+			if strict {
+				return nil, err
+			}
+			lastErr = err
+			continue
 		}
 
 		// Get secret value using shared helper
@@ -121,13 +144,17 @@ func (a *App) loadInlineSecrets(injectSecrets []string, kvMount, transitMount, e
 		}
 		secretValue, err := a.GetSecretValue(a.vaultClient, kvMount, vaultPath, opts)
 		if err != nil {
-			return nil, err
+			if strict {
+				return nil, fmt.Errorf("failed to get secret for %s: %w", envVar, err)
+			}
+			lastErr = err
+			continue
 		}
 
 		envVars[envVar] = secretValue
 	}
 
-	return envVars, nil
+	return envVars, lastErr
 }
 
 // executeCommand runs the specified command with the provided environment variables

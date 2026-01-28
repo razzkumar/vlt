@@ -504,6 +504,113 @@ func (c *Config) GetDirFileConfig(secretEntry *SecretEntry, keyName string) Secr
 	}
 }
 
+// Validate validates the Config structure
+func (c *Config) Validate() error {
+	var errs []string
+
+	// Check for at least one secret entry
+	if len(c.Secrets) == 0 {
+		errs = append(errs, "no secrets defined in config")
+	}
+
+	// Validate each secret entry
+	for i, entry := range c.Secrets {
+		if err := entry.Validate(); err != nil {
+			errs = append(errs, fmt.Sprintf("secret[%d]: %v", i, err))
+		}
+	}
+
+	// Validate file storage config if present
+	if c.Files != nil {
+		if c.Files.DefaultMode != "" {
+			if err := validateFileMode(c.Files.DefaultMode); err != nil {
+				errs = append(errs, fmt.Sprintf("files.default_mode: %v", err))
+			}
+		}
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("config validation failed:\n  - %s", strings.Join(errs, "\n  - "))
+	}
+
+	return nil
+}
+
+// Validate validates a SecretEntry
+func (s *SecretEntry) Validate() error {
+	// Check that either old or new format is used, not both
+	hasOldFormat := s.KVPath != "" || s.EnvVar != ""
+	hasNewFormat := s.Path != ""
+
+	if hasOldFormat && hasNewFormat {
+		return fmt.Errorf("cannot mix old format (kv_path/env_var) with new format (path)")
+	}
+
+	if !hasOldFormat && !hasNewFormat {
+		return fmt.Errorf("either 'path' or 'kv_path'+'env_var' is required")
+	}
+
+	// Validate old format
+	if hasOldFormat {
+		if s.KVPath == "" {
+			return fmt.Errorf("kv_path is required when using old format")
+		}
+		if s.EnvVar == "" {
+			return fmt.Errorf("env_var is required when using old format")
+		}
+	}
+
+	// Validate new format
+	if hasNewFormat {
+		// env_key requires key
+		if s.EnvKey != "" && s.Key == "" {
+			return fmt.Errorf("env_key requires 'key' to be specified")
+		}
+
+		// file requires key
+		if s.File != nil && s.Key == "" {
+			return fmt.Errorf("file output requires 'key' to be specified")
+		}
+
+		// dir and file are mutually exclusive
+		if s.File != nil && s.Dir != "" {
+			return fmt.Errorf("cannot specify both 'file' and 'dir'")
+		}
+
+		// Validate file mode if specified
+		if s.File != nil && s.File.Mode != "" {
+			if err := validateFileMode(s.File.Mode); err != nil {
+				return fmt.Errorf("file.mode: %v", err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// validateFileMode checks if a file mode string is valid octal
+func validateFileMode(mode string) error {
+	// Remove leading 0 if present
+	cleanMode := strings.TrimPrefix(mode, "0")
+	if cleanMode == "" {
+		return fmt.Errorf("invalid file mode: empty")
+	}
+
+	// Check each character is valid octal
+	for _, c := range cleanMode {
+		if c < '0' || c > '7' {
+			return fmt.Errorf("invalid octal digit in mode: %c", c)
+		}
+	}
+
+	// Check length (should be 3 or 4 digits after removing leading 0)
+	if len(cleanMode) < 3 || len(cleanMode) > 4 {
+		return fmt.Errorf("invalid file mode length: %s (expected 3-4 octal digits)", mode)
+	}
+
+	return nil
+}
+
 // expandPath expands ~ and resolves relative paths
 func expandPath(path, outputDir string) string {
 	// Expand tilde

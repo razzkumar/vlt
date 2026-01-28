@@ -18,18 +18,34 @@ type MockClient struct {
 	// Error injection
 	KVGetErr          error
 	KVPutErr          error
+	KVDeleteErr       error
+	KVListErr         error
 	TransitEncryptErr error
 	TransitDecryptErr error
 
 	// Call tracking for assertions
 	KVGetCalls          []KVGetCall
 	KVPutCalls          []KVPutCall
+	KVDeleteCalls       []KVDeleteCall
+	KVListCalls         []KVListCall
 	TransitEncryptCalls []TransitEncryptCall
 	TransitDecryptCalls []TransitDecryptCall
 }
 
 // KVGetCall records a call to KVGet
 type KVGetCall struct {
+	Mount string
+	Path  string
+}
+
+// KVDeleteCall records a call to KVDelete
+type KVDeleteCall struct {
+	Mount string
+	Path  string
+}
+
+// KVListCall records a call to KVList
+type KVListCall struct {
 	Mount string
 	Path  string
 }
@@ -166,6 +182,69 @@ func (m *MockClient) KVGet(mount, path string) (map[string]interface{}, error) {
 	return data, nil
 }
 
+// KVDelete deletes data from the mock KV store
+func (m *MockClient) KVDelete(mount, path string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.KVDeleteCalls = append(m.KVDeleteCalls, KVDeleteCall{
+		Mount: mount,
+		Path:  path,
+	})
+
+	if m.KVDeleteErr != nil {
+		return m.KVDeleteErr
+	}
+
+	key := m.makeKey(mount, path)
+	delete(m.kvStore, key)
+
+	return nil
+}
+
+// KVList lists keys in the mock KV store
+func (m *MockClient) KVList(mount, path string) ([]string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.KVListCalls = append(m.KVListCalls, KVListCall{
+		Mount: mount,
+		Path:  path,
+	})
+
+	if m.KVListErr != nil {
+		return nil, m.KVListErr
+	}
+
+	prefix := m.makeKey(mount, path)
+	if !strings.HasSuffix(prefix, "/") {
+		prefix += "/"
+	}
+
+	result := []string{}
+	seen := make(map[string]bool)
+
+	for key := range m.kvStore {
+		if strings.HasPrefix(key, prefix) {
+			// Extract the next path segment
+			remainder := strings.TrimPrefix(key, prefix)
+			parts := strings.SplitN(remainder, "/", 2)
+			if len(parts) > 0 && parts[0] != "" {
+				name := parts[0]
+				if len(parts) > 1 {
+					name += "/" // It's a directory
+				}
+				if !seen[name] {
+					seen[name] = true
+					result = append(result, name)
+				}
+			}
+		}
+	}
+
+	return result, nil
+}
+
 // makeKey creates a storage key from mount and path
 func (m *MockClient) makeKey(mount, path string) string {
 	return fmt.Sprintf("%s/%s", strings.TrimSuffix(mount, "/"), strings.TrimPrefix(path, "/"))
@@ -188,10 +267,14 @@ func (m *MockClient) Reset() {
 	m.kvStore = make(map[string]map[string]interface{})
 	m.KVGetCalls = nil
 	m.KVPutCalls = nil
+	m.KVDeleteCalls = nil
+	m.KVListCalls = nil
 	m.TransitEncryptCalls = nil
 	m.TransitDecryptCalls = nil
 	m.KVGetErr = nil
 	m.KVPutErr = nil
+	m.KVDeleteErr = nil
+	m.KVListErr = nil
 	m.TransitEncryptErr = nil
 	m.TransitDecryptErr = nil
 }

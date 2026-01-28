@@ -23,6 +23,11 @@ func (a *App) LoadConfig(path string) (*config.Config, error) {
 		return nil, fmt.Errorf("parse yaml config: %w", err)
 	}
 
+	// Validate the config
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid config: %w", err)
+	}
+
 	return &cfg, nil
 }
 
