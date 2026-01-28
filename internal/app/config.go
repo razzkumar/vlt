@@ -244,17 +244,17 @@ func (a *App) handleFileEntry(cfg *config.Config, secret *config.SecretEntry, kv
 	if err != nil {
 		return err
 	}
-	
+
 	// Get the file configuration for this secret
 	fileConfig := cfg.GetSecretFileConfig(secret)
-	
+
 	// Convert to utils.FileStorageOptions
 	storageOpts := utils.FileStorageOptions{
 		Path:      fileConfig.Path,
 		Mode:      fileConfig.Mode,
 		CreateDir: *fileConfig.CreateDir,
 	}
-	
+
 	// Save the file
 	return utils.SaveAsFileWithOptions(secretValue, storageOpts)
 }
@@ -290,7 +290,7 @@ func (a *App) handleDirEntry(cfg *config.Config, secret *config.SecretEntry, kvM
 				keysToSave[key] = value
 			}
 		}
-		
+
 		// Handle single value case
 		if len(keysToSave) == 0 {
 			if value, ok := data["value"]; ok {
@@ -317,21 +317,21 @@ func (a *App) handleDirEntry(cfg *config.Config, secret *config.SecretEntry, kvM
 				break
 			}
 		}
-		
+
 		if hasSpecificFileConfig {
 			continue // Skip this key as it's handled by its own file configuration
 		}
-		
+
 		// Get directory file configuration for this key
 		fileConfig := cfg.GetDirFileConfig(secret, keyName)
-		
+
 		// Convert to utils.FileStorageOptions
 		storageOpts := utils.FileStorageOptions{
 			Path:      fileConfig.Path,
 			Mode:      fileConfig.Mode,
 			CreateDir: *fileConfig.CreateDir,
 		}
-		
+
 		// Save the file
 		if err := utils.SaveAsFileWithOptions(fmt.Sprintf("%v", value), storageOpts); err != nil {
 			return fmt.Errorf("failed to save key %s as file %s: %w", keyName, fileConfig.Path, err)

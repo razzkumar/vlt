@@ -106,7 +106,7 @@ func getPutCommand() *cli.Command {
 			} else if ctx.IsSet("env-file") {
 				envFile = ctx.String("env-file")
 			}
-			
+
 			opts := &app.PutOptions{
 				KVMount:       ctx.String("kv-mount"),
 				KVPath:        ctx.String("path"),
@@ -211,7 +211,7 @@ Examples:
 						cfg = loadedCfg
 					}
 				}
-				
+
 				// Use direct path
 				opts := &app.GetOptions{
 					KVMount:       ctx.String("kv-mount"),
@@ -464,12 +464,12 @@ func findConfigFile() string {
 			return envConfig
 		}
 	}
-	
+
 	// Check current directory for .vlt.yaml
 	if _, err := os.Stat(".vlt.yaml"); err == nil {
 		return ".vlt.yaml"
 	}
-	
+
 	// Check global config in home directory
 	homeDir, err := os.UserHomeDir()
 	if err == nil {
@@ -478,7 +478,7 @@ func findConfigFile() string {
 			return globalConfig
 		}
 	}
-	
+
 	return ""
 }
 

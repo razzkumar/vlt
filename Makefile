@@ -4,7 +4,7 @@ BINARY_NAME=vlt
 BINARY_PATH=./$(BINARY_NAME)
 MAIN_PATH=./cmd/cli
 
-.PHONY: all build clean install uninstall test fmt vet help
+.PHONY: all build clean install uninstall test test-coverage test-race fmt vet help
 
 all: build
 
@@ -36,6 +36,16 @@ vet:
 # Run tests
 test:
 	go test ./...
+
+# Run tests with coverage report
+test-coverage:
+	go test -coverprofile=coverage.out ./...
+	go tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report generated: coverage.html"
+
+# Run tests with race detector
+test-race:
+	go test -race ./...
 
 # Download dependencies
 deps:
@@ -90,6 +100,8 @@ help:
 	@echo "  fmt                  - Format Go code"
 	@echo "  vet                  - Run go vet"
 	@echo "  test                 - Run tests"
+	@echo "  test-coverage        - Run tests with coverage report"
+	@echo "  test-race            - Run tests with race detector"
 	@echo "  deps                 - Download and tidy dependencies"
 	@echo "  build-all            - Build for multiple platforms"
 	@echo "  completion-bash      - Generate bash completion"

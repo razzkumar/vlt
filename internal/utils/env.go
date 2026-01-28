@@ -30,7 +30,7 @@ func LoadEnvFileAsPlaintext(path string) (map[string]any, error) {
 }
 
 // LoadEnvFile loads a .env file and returns encrypted/plaintext data map
-func LoadEnvFile(path string, client *vault.Client, transitMount, keyName string, useEncryption bool) (map[string]any, error) {
+func LoadEnvFile(path string, client vault.VaultClient, transitMount, keyName string, useEncryption bool) (map[string]any, error) {
 	// Use godotenv to parse the .env file
 	envMap, err := godotenv.Read(path)
 	if err != nil {
@@ -55,7 +55,7 @@ func LoadEnvFile(path string, client *vault.Client, transitMount, keyName string
 }
 
 // LoadFileAsBase64 reads a file and encodes it as base64
-func LoadFileAsBase64(path string, client *vault.Client, transitMount, keyName string, useEncryption bool) (map[string]any, error) {
+func LoadFileAsBase64(path string, client vault.VaultClient, transitMount, keyName string, useEncryption bool) (map[string]any, error) {
 	fileContent, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read file: %w", err)
@@ -107,7 +107,7 @@ func IsEncryptedMultiValue(data map[string]any) bool {
 }
 
 // DecryptMultiValueData decrypts all encrypted values in a data map
-func DecryptMultiValueData(data map[string]any, client *vault.Client, transitMount, keyName string) (map[string]any, error) {
+func DecryptMultiValueData(data map[string]any, client vault.VaultClient, transitMount, keyName string) (map[string]any, error) {
 	decryptedData := make(map[string]any)
 
 	for k, v := range data {
@@ -159,7 +159,6 @@ func MergeData(existing, new map[string]any) map[string]any {
 	return result
 }
 
-
 // FileStorageOptions holds options for file storage
 type FileStorageOptions struct {
 	Path      string // Full path where the file should be saved
@@ -181,7 +180,7 @@ func SaveAsFile(filename, base64Content string) error {
 // Automatically detects if content is base64-encoded or plain text
 func SaveAsFileWithOptions(content string, opts FileStorageOptions) error {
 	var fileContent []byte
-	
+
 	// Try to decode as base64 first (for files uploaded with --from-file)
 	if decoded, err := base64.StdEncoding.DecodeString(content); err == nil {
 		// Successfully decoded as base64, use decoded content
@@ -190,7 +189,7 @@ func SaveAsFileWithOptions(content string, opts FileStorageOptions) error {
 		// Not valid base64, treat as plain text (for normal secret keys)
 		fileContent = []byte(content)
 	}
-	
+
 	// Create directory if needed
 	if opts.CreateDir {
 		dir := filepath.Dir(opts.Path)
@@ -198,13 +197,13 @@ func SaveAsFileWithOptions(content string, opts FileStorageOptions) error {
 			return fmt.Errorf("create directory %s: %w", dir, err)
 		}
 	}
-	
+
 	// Parse file permissions
 	mode, err := parseFileMode(opts.Mode)
 	if err != nil {
 		return fmt.Errorf("invalid file mode %s: %w", opts.Mode, err)
 	}
-	
+
 	if err := os.WriteFile(opts.Path, fileContent, mode); err != nil {
 		return fmt.Errorf("write file %s: %w", opts.Path, err)
 	}

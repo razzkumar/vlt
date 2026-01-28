@@ -72,7 +72,7 @@ type SecretEntry struct {
 
 	// File configuration - when this key should be saved as a file
 	File *SecretFileConfig `yaml:"file,omitempty"`
-	
+
 	// Directory configuration - when all keys should be saved as individual files
 	Dir string `yaml:"dir,omitempty"` // directory path to save all keys as individual files
 }
@@ -434,18 +434,18 @@ func (c *Config) GetSecretFileConfig(secretEntry *SecretEntry) SecretFileConfig 
 // GetDirFileConfig returns the file configuration for saving a key as a file in the specified directory
 func (c *Config) GetDirFileConfig(secretEntry *SecretEntry, keyName string) SecretFileConfig {
 	fileStorage := c.GetFileStorageConfig()
-	
+
 	// Expand the directory path
 	dirPath := expandPath(secretEntry.Dir, fileStorage.OutputDir)
-	
+
 	// Create file path using key name as filename
 	filePath := filepath.Join(dirPath, keyName)
-	
+
 	createDir := true
 	if fileStorage.CreateDirs != nil {
 		createDir = *fileStorage.CreateDirs
 	}
-	
+
 	return SecretFileConfig{
 		Path:      filePath,
 		Mode:      fileStorage.DefaultMode,

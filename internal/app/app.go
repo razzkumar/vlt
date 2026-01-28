@@ -9,7 +9,7 @@ import (
 
 // App represents the main application
 type App struct {
-	vaultClient *vault.Client
+	vaultClient vault.VaultClient
 }
 
 // New creates a new application instance
@@ -23,4 +23,11 @@ func New() (*App, error) {
 	return &App{
 		vaultClient: client,
 	}, nil
+}
+
+// NewWithClient creates an App with a provided VaultClient (for testing)
+func NewWithClient(client vault.VaultClient) *App {
+	return &App{
+		vaultClient: client,
+	}
 }
