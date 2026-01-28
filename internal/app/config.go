@@ -57,7 +57,7 @@ func (a *App) GenerateEnvFile(configPath, outputPath string, encryptionKey strin
 		return fmt.Errorf("write output file: %w", err)
 	}
 
-	fmt.Printf("Generated %s with %d secrets\n", outputPath, len(envLines))
+	fmt.Fprintf(os.Stderr, "Generated %s with %d secrets\n", outputPath, len(envLines))
 	return nil
 }
 
@@ -103,12 +103,12 @@ func (a *App) loadSecretsFromConfig(cfg *config.Config, kvMount, transitMount, e
 				if secret.Required {
 					return nil, err
 				}
-				fmt.Printf("warning: %v\n", err)
+				fmt.Fprintf(os.Stderr, "warning: %v\n", err)
 				continue
 			}
 			envVars[secret.EnvVar] = secretValue
 		} else {
-			fmt.Printf("skipping invalid secret entry: either 'path' or 'kv_path+env_var' must be specified\n")
+			fmt.Fprintf(os.Stderr, "warning: skipping invalid secret entry: either 'path' or 'kv_path+env_var' must be specified\n")
 			continue
 		}
 	}

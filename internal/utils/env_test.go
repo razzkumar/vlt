@@ -207,6 +207,7 @@ func TestMergeData(t *testing.T) {
 }
 
 func TestParseFileMode(t *testing.T) {
+	// Note: ParseFileMode is now exported
 	tests := []struct {
 		name     string
 		mode     string
@@ -253,7 +254,7 @@ func TestParseFileMode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := parseFileMode(tt.mode)
+			result, err := ParseFileMode(tt.mode)
 
 			if tt.hasError {
 				if err == nil {

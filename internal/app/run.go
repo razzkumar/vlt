@@ -108,49 +108,20 @@ func (a *App) loadInlineSecrets(injectSecrets []string, kvMount, transitMount, e
 	envVars := make(map[string]string)
 
 	for _, inject := range injectSecrets {
-		// Parse ENV_VAR=vault_path format
-		parts := strings.SplitN(inject, "=", 2)
-		if len(parts) != 2 {
-			return nil, fmt.Errorf("invalid inject format: %s (expected ENV_VAR=vault_path)", inject)
-		}
-
-		envVar := strings.TrimSpace(parts[0])
-		vaultPath := strings.TrimSpace(parts[1])
-
-		if envVar == "" || vaultPath == "" {
-			return nil, fmt.Errorf("invalid inject format: %s (empty env var or vault path)", inject)
-		}
-
-		// Get secret from Vault
-		data, err := a.vaultClient.KVGet(kvMount, vaultPath)
+		// Validate and parse ENV_VAR=vault_path format
+		envVar, vaultPath, err := config.ValidateInjectFormat(inject)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get secret %s: %w", vaultPath, err)
+			return nil, err
 		}
 
-		var secretValue string
-
-		// Handle different secret types
-		if ciphertext, ok := data["ciphertext"].(string); ok && strings.HasPrefix(ciphertext, "vault:v") {
-			// Single encrypted value
-			if encryptionKey == "" {
-				return nil, fmt.Errorf("encryption key required for encrypted secret %s", vaultPath)
-			}
-			plaintext, err := a.vaultClient.TransitDecrypt(transitMount, encryptionKey, ciphertext)
-			if err != nil {
-				return nil, fmt.Errorf("failed to decrypt secret %s: %w", vaultPath, err)
-			}
-			secretValue = string(plaintext)
-		} else if value, ok := data["value"].(string); ok {
-			// Single plaintext value
-			secretValue = value
-		} else if len(data) == 1 {
-			// Single value with any key
-			for _, v := range data {
-				secretValue = fmt.Sprintf("%v", v)
-				break
-			}
-		} else {
-			return nil, fmt.Errorf("secret %s contains multiple values, cannot inject as single environment variable", vaultPath)
+		// Get secret value using shared helper
+		opts := &DecryptOptions{
+			TransitMount:  transitMount,
+			EncryptionKey: encryptionKey,
+		}
+		secretValue, err := a.GetSecretValue(a.vaultClient, kvMount, vaultPath, opts)
+		if err != nil {
+			return nil, err
 		}
 
 		envVars[envVar] = secretValue

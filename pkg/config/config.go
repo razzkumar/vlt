@@ -148,6 +148,57 @@ func GetVaultConfigFromEnv() *VaultConfig {
 	return cfg
 }
 
+// VaultConfigOverrides holds optional overrides for VaultConfig
+// Empty strings are ignored (env value used instead)
+type VaultConfigOverrides struct {
+	Addr        string
+	Token       string
+	Namespace   string
+	AuthMethod  string
+	RoleID      string
+	SecretID    string
+	GitHubToken string
+	K8sRole     string
+}
+
+// GetVaultConfigWithOverrides creates VaultConfig from environment variables with optional overrides
+// This allows CLI flags to take precedence without mutating environment variables
+func GetVaultConfigWithOverrides(overrides *VaultConfigOverrides) *VaultConfig {
+	cfg := GetVaultConfigFromEnv()
+
+	if overrides == nil {
+		return cfg
+	}
+
+	// Apply overrides (non-empty values take precedence)
+	if overrides.Addr != "" {
+		cfg.Addr = overrides.Addr
+	}
+	if overrides.Token != "" {
+		cfg.Token = overrides.Token
+	}
+	if overrides.Namespace != "" {
+		cfg.Namespace = overrides.Namespace
+	}
+	if overrides.AuthMethod != "" {
+		cfg.AuthMethod = strings.ToLower(overrides.AuthMethod)
+	}
+	if overrides.RoleID != "" {
+		cfg.RoleID = overrides.RoleID
+	}
+	if overrides.SecretID != "" {
+		cfg.SecretID = overrides.SecretID
+	}
+	if overrides.GitHubToken != "" {
+		cfg.GitHubToken = overrides.GitHubToken
+	}
+	if overrides.K8sRole != "" {
+		cfg.K8sRole = overrides.K8sRole
+	}
+
+	return cfg
+}
+
 // Validate checks if the configuration is valid
 func (c *VaultConfig) Validate() error {
 	if c.Addr == "" {

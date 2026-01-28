@@ -25,6 +25,16 @@ type PutOptions struct {
 
 // Put stores secrets in Vault with optional encryption
 func (a *App) Put(opts *PutOptions) error {
+	// Validate inputs
+	if err := config.ValidateVaultPath(opts.KVPath); err != nil {
+		return fmt.Errorf("invalid path: %w", err)
+	}
+	if opts.Key != "" {
+		if err := config.ValidateSecretKey(opts.Key); err != nil {
+			return fmt.Errorf("invalid key: %w", err)
+		}
+	}
+
 	effectiveEncryptionKey := config.GetEncryptionKey(opts.EncryptionKey)
 	useEncryption := effectiveEncryptionKey != ""
 
@@ -137,10 +147,10 @@ func (a *App) Put(opts *PutOptions) error {
 	}
 
 	if opts.Key != "" {
-		fmt.Printf("Updated key '%s' as %s: %s/%s\n", opts.Key, encryptionStatus, opts.KVMount, opts.KVPath)
+		fmt.Fprintf(os.Stderr, "Updated key '%s' as %s: %s/%s\n", opts.Key, encryptionStatus, opts.KVMount, opts.KVPath)
 	} else {
 		secretsCount := len(finalData)
-		fmt.Printf("Stored/updated %d secret(s) as %s: %s/%s\n", secretsCount, encryptionStatus, opts.KVMount, opts.KVPath)
+		fmt.Fprintf(os.Stderr, "Stored/updated %d secret(s) as %s: %s/%s\n", secretsCount, encryptionStatus, opts.KVMount, opts.KVPath)
 	}
 
 	return nil

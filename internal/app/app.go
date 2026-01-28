@@ -31,3 +31,17 @@ func NewWithClient(client vault.VaultClient) *App {
 		vaultClient: client,
 	}
 }
+
+// NewWithOverrides creates a new application instance with config overrides
+// This allows CLI flags to take precedence over environment variables
+func NewWithOverrides(overrides *config.VaultConfigOverrides) (*App, error) {
+	vaultConfig := config.GetVaultConfigWithOverrides(overrides)
+	client, err := vault.NewClient(vaultConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create vault client: %w", err)
+	}
+
+	return &App{
+		vaultClient: client,
+	}, nil
+}

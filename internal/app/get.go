@@ -22,6 +22,16 @@ type GetOptions struct {
 
 // Get retrieves and optionally decrypts secrets from Vault
 func (a *App) Get(opts *GetOptions) error {
+	// Validate inputs
+	if err := config.ValidateVaultPath(opts.KVPath); err != nil {
+		return fmt.Errorf("invalid path: %w", err)
+	}
+	if opts.Key != "" {
+		if err := config.ValidateSecretKey(opts.Key); err != nil {
+			return fmt.Errorf("invalid key: %w", err)
+		}
+	}
+
 	effectiveEncryptionKey := config.GetEncryptionKey(opts.EncryptionKey)
 
 	// Get from KV

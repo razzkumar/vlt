@@ -71,7 +71,9 @@ It supports storing and retrieving single values or multiple key-value pairs, wi
 			},
 		},
 		Before: func(ctx *cli.Context) error {
-			// Set environment variables from flags if provided
+			// Legacy: Set environment variables from flags if provided
+			// TODO: Refactor commands to use app.NewWithOverrides() instead
+			// This env mutation pattern exists for backward compatibility
 			if addr := ctx.String("vault-addr"); addr != "" {
 				os.Setenv("VAULT_ADDR", addr)
 			}
