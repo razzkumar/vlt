@@ -75,7 +75,7 @@ func LoadFileAsBase64(path string, client vault.VaultClient, transitMount, keyNa
 // FileStorageOptions holds options for file storage
 type FileStorageOptions struct {
 	Path      string // Full path where the file should be saved
-	Mode      string // File permissions in octal (e.g., "0644")
+	Mode      string // File permissions in octal (e.g., "0600")
 	CreateDir bool   // Whether to create directories if they don't exist
 }
 
@@ -83,7 +83,7 @@ type FileStorageOptions struct {
 func SaveAsFile(filename, base64Content string) error {
 	opts := FileStorageOptions{
 		Path:      filename,
-		Mode:      "0644",
+		Mode:      "0600",
 		CreateDir: false,
 	}
 	return SaveAsFileWithOptions(base64Content, opts)
@@ -106,7 +106,7 @@ func SaveAsFileWithOptions(content string, opts FileStorageOptions) error {
 	// Create directory if needed
 	if opts.CreateDir {
 		dir := filepath.Dir(opts.Path)
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		if err := os.MkdirAll(dir, 0700); err != nil {
 			return fmt.Errorf("create directory %s: %w", dir, err)
 		}
 	}
@@ -125,10 +125,10 @@ func SaveAsFileWithOptions(content string, opts FileStorageOptions) error {
 	return nil
 }
 
-// ParseFileMode parses octal file mode string (e.g., "0644") to os.FileMode
+// ParseFileMode parses octal file mode string (e.g., "0600") to os.FileMode
 func ParseFileMode(modeStr string) (os.FileMode, error) {
 	if modeStr == "" {
-		return 0644, nil // default
+		return 0600, nil // default
 	}
 
 	// Parse octal string

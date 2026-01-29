@@ -11,6 +11,10 @@ vlt-*
 config.yaml
 secrets.yaml
 vlt.yaml
+.vlt.yaml
+
+# Local AI tool config
+.claude/
 
 # IDE
 .vscode/
@@ -28,3 +32,6 @@ Thumbs.db
 *.out
 /vendor/
 /dist/
+
+# Temp artifacts
+tmp/

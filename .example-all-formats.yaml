@@ -107,7 +107,7 @@ kv:
 # Global file storage settings
 files:
   output_dir: "./test_files"
-  default_mode: "0644"
+  default_mode: "0600"
   create_dirs: true
 
 secrets:
@@ -125,7 +125,7 @@ secrets:
   # File using global settings
   - path: test/keys
     key: api_key.txt
-    file: {}  # Uses defaults: ./test_files/api_key.txt with mode 0644
+    file: {}  # Uses defaults: ./test_files/api_key.txt with mode 0600
 
 ---
 

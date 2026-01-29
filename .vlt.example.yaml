@@ -1,0 +1,40 @@
+# Example configuration for vlt
+# Copy this file to .vlt.yaml and customize for your environment.
+# Do NOT commit real tokens or secrets.
+
+vault:
+  addr: "http://localhost:8200"
+  # namespace: ""
+  # skip_verify: false
+  # ca_cert: "/path/to/ca.pem"
+
+# Optional transit configuration (used when TRANSIT=true)
+# transit:
+#   mount: "transit"
+#   key: "app-secrets"
+
+kv:
+  mount: "kv"
+
+# Optional global file storage settings
+# files:
+#   output_dir: "./secrets"
+#   default_mode: "0600"
+#   create_dirs: true
+
+secrets:
+  # Load all keys from a path into env vars
+  - path: "myapp/config"
+
+  # Load a single key and map to a custom env var name
+  - path: "myapp/database"
+    key: "password"
+    env_key: "DB_PASSWORD"
+
+  # Save a key as a file
+  - path: "myapp/ssh"
+    key: "id_rsa"
+    file:
+      path: "./secrets/id_rsa"
+      mode: "0600"
+      create_dir: true

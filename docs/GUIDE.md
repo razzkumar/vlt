@@ -77,8 +77,8 @@ Transit encryption follows `TRANSIT`/`ENCRYPTION_KEY`/`TRANSIT_MOUNT` rules: set
 ```yaml
 files:
   output_dir: "./secrets"    # defaults to current directory
-  default_mode: "0600"       # defaults to "0644"
-  create_dirs: true           # defaults to true
+  default_mode: "0600"       # defaults to "0600"
+  create_dirs: true          # defaults to true
 ```
 
 ### Secret Entries
@@ -105,6 +105,7 @@ When a matching config exists, `vlt get --config ...` or `vlt get --path ... --k
 
 - Relative paths resolve against `files.output_dir`.
 - Use restrictive modes (`0600`, `0400`) for sensitive material.
+- Created directories default to `0700` when enabled.
 - The command prints where files land, e.g. `File saved: ./secrets/server.crt (mode: 0600)`.
 
 ## JSON Command

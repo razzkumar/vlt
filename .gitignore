@@ -11,6 +11,7 @@ vlt-*
 config.yaml
 secrets.yaml
 vlt.yaml
+.vlt.yaml
 
 # IDE
 .vscode/
@@ -28,3 +29,6 @@ Thumbs.db
 *.out
 /vendor/
 /dist/
+
+# Temp artifacts
+tmp/

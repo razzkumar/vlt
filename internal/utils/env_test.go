@@ -233,9 +233,9 @@ func TestParseFileMode(t *testing.T) {
 			hasError: false,
 		},
 		{
-			name:     "empty defaults to 0644",
+			name:     "empty defaults to 0600",
 			mode:     "",
-			expected: 0644,
+			expected: 0600,
 			hasError: false,
 		},
 		{

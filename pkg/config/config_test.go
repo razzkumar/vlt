@@ -798,8 +798,8 @@ func TestConfig_GetFileStorageConfig(t *testing.T) {
 		if result.OutputDir != "." {
 			t.Errorf("expected output dir '.', got %q", result.OutputDir)
 		}
-		if result.DefaultMode != "0644" {
-			t.Errorf("expected default mode '0644', got %q", result.DefaultMode)
+		if result.DefaultMode != "0600" {
+			t.Errorf("expected default mode '0600', got %q", result.DefaultMode)
 		}
 		if result.CreateDirs == nil || !*result.CreateDirs {
 			t.Error("expected CreateDirs to be true")
@@ -818,8 +818,8 @@ func TestConfig_GetFileStorageConfig(t *testing.T) {
 		if result.OutputDir != "/custom/dir" {
 			t.Errorf("expected output dir '/custom/dir', got %q", result.OutputDir)
 		}
-		if result.DefaultMode != "0644" {
-			t.Errorf("expected default mode '0644', got %q", result.DefaultMode)
+		if result.DefaultMode != "0600" {
+			t.Errorf("expected default mode '0600', got %q", result.DefaultMode)
 		}
 	})
 }

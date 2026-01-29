@@ -32,7 +32,7 @@ type Config struct {
 type FileStorageConfig struct {
 	// OutputDir specifies the default directory where files should be saved (default: current directory)
 	OutputDir string `yaml:"output_dir,omitempty"`
-	// DefaultMode sets the default file permissions (octal, e.g., 0644)
+	// DefaultMode sets the default file permissions (octal, e.g., 0600)
 	DefaultMode string `yaml:"default_mode,omitempty"`
 	// CreateDirs controls whether to create directories if they don't exist by default (defaults to true)
 	CreateDirs *bool `yaml:"create_dirs,omitempty"`
@@ -44,7 +44,7 @@ type SecretFileConfig struct {
 	// Supports tilde expansion (~) and can be absolute or relative
 	// If relative and no global output_dir, uses current directory
 	Path string `yaml:"path,omitempty"`
-	// Mode sets file permissions (octal, e.g., 0600) - defaults to global default or 0644
+	// Mode sets file permissions (octal, e.g., 0600) - defaults to global default or 0600
 	Mode string `yaml:"mode,omitempty"`
 	// CreateDir controls whether to create the directory for this file - defaults to global setting or true
 	CreateDir *bool `yaml:"create_dir,omitempty"`
@@ -412,7 +412,7 @@ func (c *Config) GetFileStorageConfig() *FileStorageConfig {
 		defaultCreateDirs := true
 		c.Files = &FileStorageConfig{
 			OutputDir:   ".",
-			DefaultMode: "0644",
+			DefaultMode: "0600",
 			CreateDirs:  &defaultCreateDirs,
 		}
 		return c.Files
@@ -423,7 +423,7 @@ func (c *Config) GetFileStorageConfig() *FileStorageConfig {
 		c.Files.OutputDir = "."
 	}
 	if c.Files.DefaultMode == "" {
-		c.Files.DefaultMode = "0644"
+		c.Files.DefaultMode = "0600"
 	}
 	if c.Files.CreateDirs == nil {
 		defaultCreateDirs := true
