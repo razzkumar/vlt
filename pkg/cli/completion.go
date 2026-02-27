@@ -76,10 +76,10 @@ _vlt_completion() {
     # Complete flags based on command
     case "${COMP_WORDS[1]}" in
         put|p)
-            opts="--path --encryption-key --key --value --from-env --from-file --kv-mount --transit-mount --help"
+            opts="--path --encryption-key --key --value --env-file --from-file --kv-mount --transit-mount --force --dry-run --help"
             ;;
         get|g)
-            opts="--path --config --encryption-key --key --json --kv-mount --transit-mount --help"
+            opts="--path --config --encryption-key --key --json --raw --default --kv-mount --transit-mount --help"
             ;;
         delete|d|rm)
             opts="--path --kv-mount --help"
@@ -100,7 +100,7 @@ _vlt_completion() {
             opts="--config --output --help"
             ;;
         run|r)
-            opts="--config --encryption-key --inject --env-file --kv-mount --transit-mount --dry-run --preserve-env --help"
+            opts="--config --encryption-key --inject --env-file --kv-mount --transit-mount --dry-run --preserve-env --strict --prefix --help"
             ;;
         json|j)
             opts="--encryption-key --transit-mount --help"
@@ -117,7 +117,7 @@ _vlt_completion() {
     esac
 
     # Complete file paths for certain flags
-    if [[ "$prev" == "--from-env" || "$prev" == "--from-file" || "$prev" == "--config" ]]; then
+    if [[ "$prev" == "--env-file" || "$prev" == "--from-file" || "$prev" == "--config" ]]; then
         COMPREPLY=( $(compgen -f -- ${cur}) )
         return 0
     fi
@@ -150,10 +150,12 @@ _vlt() {
                         '--encryption-key=[Transit encryption key name]:key:' \
                         '--key=[Specific key to update]:key:' \
                         '--value=[Secret value]:value:' \
-                        '--from-env=[Load from .env file]:file:_files' \
+                        '--env-file=[Load from .env file]:file:_files' \
                         '--from-file=[Load file as base64]:file:_files' \
                         '--kv-mount=[KV v2 mount path]:mount:' \
                         '--transit-mount=[Transit mount path]:mount:' \
+                        '--force[Overwrite existing data instead of merging]' \
+                        '--dry-run[Show what would be done without changes]' \
                         '--help[Show help]'
                     ;;
                 get|g)
@@ -163,6 +165,8 @@ _vlt() {
                         '--encryption-key=[Transit encryption key name]:key:' \
                         '--key=[Specific key to retrieve]:key:' \
                         '--json[Output as JSON format]' \
+                        '--raw[Output raw value without newline]' \
+                        '--default=[Default value if not found]:value:' \
                         '--kv-mount=[KV v2 mount path]:mount:' \
                         '--transit-mount=[Transit mount path]:mount:' \
                         '--help[Show help]'
@@ -204,6 +208,8 @@ _vlt() {
                         '--transit-mount=[Transit mount path]:mount:' \
                         '--dry-run[Show env vars without running]' \
                         '--preserve-env[Preserve current environment]' \
+                        '--strict[Fail if any secret cannot be loaded]' \
+                        '--prefix=[Add prefix to injected variable names]:prefix:' \
                         '--help[Show help]'
                     ;;
                 json|j)
@@ -278,10 +284,12 @@ complete -c vlt -f -n '__fish_seen_subcommand_from put p' -l 'path' -d 'KV path 
 complete -c vlt -f -n '__fish_seen_subcommand_from put p' -l 'encryption-key' -d 'Transit encryption key name'
 complete -c vlt -f -n '__fish_seen_subcommand_from put p' -l 'key' -d 'Specific key to update in multi-value secret'
 complete -c vlt -f -n '__fish_seen_subcommand_from put p' -l 'value' -d 'Secret value'
-complete -c vlt -f -n '__fish_seen_subcommand_from put p' -l 'from-env' -d 'Load multiple key-value pairs from .env file'
+complete -c vlt -f -n '__fish_seen_subcommand_from put p' -l 'env-file' -d 'Load key-value pairs from .env file'
 complete -c vlt -f -n '__fish_seen_subcommand_from put p' -l 'from-file' -d 'Load file content as base64 encoded value'
 complete -c vlt -f -n '__fish_seen_subcommand_from put p' -l 'kv-mount' -d 'KV v2 mount path'
 complete -c vlt -f -n '__fish_seen_subcommand_from put p' -l 'transit-mount' -d 'Transit mount path'
+complete -c vlt -f -n '__fish_seen_subcommand_from put p' -l 'force' -d 'Overwrite existing data instead of merging'
+complete -c vlt -f -n '__fish_seen_subcommand_from put p' -l 'dry-run' -d 'Show what would be done without changes'
 
 # Copy command options
 complete -c vlt -f -n '__fish_seen_subcommand_from copy c cp' -l 'from' -d 'Source KV path to copy from'
@@ -296,6 +304,8 @@ complete -c vlt -f -n '__fish_seen_subcommand_from get g' -l 'config' -d 'YAML c
 complete -c vlt -f -n '__fish_seen_subcommand_from get g' -l 'encryption-key' -d 'Transit encryption key name'
 complete -c vlt -f -n '__fish_seen_subcommand_from get g' -l 'key' -d 'Specific key to retrieve'
 complete -c vlt -f -n '__fish_seen_subcommand_from get g' -l 'json' -d 'Output as JSON format'
+complete -c vlt -f -n '__fish_seen_subcommand_from get g' -l 'raw' -d 'Output raw value without newline'
+complete -c vlt -f -n '__fish_seen_subcommand_from get g' -l 'default' -d 'Default value if not found'
 complete -c vlt -f -n '__fish_seen_subcommand_from get g' -l 'kv-mount' -d 'KV v2 mount path'
 complete -c vlt -f -n '__fish_seen_subcommand_from get g' -l 'transit-mount' -d 'Transit mount path'
 
@@ -312,6 +322,33 @@ complete -c vlt -f -n '__fish_seen_subcommand_from run r' -l 'kv-mount' -d 'KV v
 complete -c vlt -f -n '__fish_seen_subcommand_from run r' -l 'transit-mount' -d 'Transit mount path'
 complete -c vlt -f -n '__fish_seen_subcommand_from run r' -l 'dry-run' -d 'Show environment variables without running command'
 complete -c vlt -f -n '__fish_seen_subcommand_from run r' -l 'preserve-env' -d 'Preserve all current environment variables'
+complete -c vlt -f -n '__fish_seen_subcommand_from run r' -l 'strict' -d 'Fail if any secret cannot be loaded'
+complete -c vlt -f -n '__fish_seen_subcommand_from run r' -l 'prefix' -d 'Add prefix to injected variable names'
+
+# Delete command options
+complete -c vlt -f -n '__fish_seen_subcommand_from delete d rm' -l 'path' -d 'KV path of secret to delete'
+complete -c vlt -f -n '__fish_seen_subcommand_from delete d rm' -l 'kv-mount' -d 'KV v2 mount path'
+
+# List command options
+complete -c vlt -f -n '__fish_seen_subcommand_from list ls' -l 'path' -d 'KV path to list'
+complete -c vlt -f -n '__fish_seen_subcommand_from list ls' -l 'kv-mount' -d 'KV v2 mount path'
+
+# Export command options
+complete -c vlt -f -n '__fish_seen_subcommand_from export exp' -l 'path' -d 'KV path to export'
+complete -c vlt -f -n '__fish_seen_subcommand_from export exp' -l 'output' -d 'Output file path'
+complete -c vlt -f -n '__fish_seen_subcommand_from export exp' -l 'format' -d 'Output format (json, env)'
+complete -c vlt -f -n '__fish_seen_subcommand_from export exp' -l 'encryption-key' -d 'Transit encryption key name'
+complete -c vlt -f -n '__fish_seen_subcommand_from export exp' -l 'kv-mount' -d 'KV v2 mount path'
+complete -c vlt -f -n '__fish_seen_subcommand_from export exp' -l 'transit-mount' -d 'Transit mount path'
+
+# Import command options
+complete -c vlt -f -n '__fish_seen_subcommand_from import imp' -l 'path' -d 'KV path to import into'
+complete -c vlt -f -n '__fish_seen_subcommand_from import imp' -l 'input' -d 'Input file path'
+complete -c vlt -f -n '__fish_seen_subcommand_from import imp' -l 'format' -d 'Input format (json, env)'
+complete -c vlt -f -n '__fish_seen_subcommand_from import imp' -l 'encryption-key' -d 'Transit encryption key name'
+complete -c vlt -f -n '__fish_seen_subcommand_from import imp' -l 'merge' -d 'Merge with existing data'
+complete -c vlt -f -n '__fish_seen_subcommand_from import imp' -l 'kv-mount' -d 'KV v2 mount path'
+complete -c vlt -f -n '__fish_seen_subcommand_from import imp' -l 'transit-mount' -d 'Transit mount path'
 
 # JSON command options
 complete -c vlt -f -n '__fish_seen_subcommand_from json j' -l 'encryption-key' -d 'Transit encryption key name'
@@ -354,10 +391,10 @@ Register-ArgumentCompleter -Native -CommandName vlt -ScriptBlock {
     # Complete based on subcommand
     switch ($commandElements[0]) {
         { $_ -in @('put', 'p') } {
-            return @('--path', '--encryption-key', '--key', '--value', '--from-env', '--from-file', '--kv-mount', '--transit-mount', '--help') | Where-Object { $_ -like "$wordToComplete*" }
+            return @('--path', '--encryption-key', '--key', '--value', '--env-file', '--from-file', '--kv-mount', '--transit-mount', '--force', '--dry-run', '--help') | Where-Object { $_ -like "$wordToComplete*" }
         }
         { $_ -in @('get', 'g') } {
-            return @('--path', '--config', '--encryption-key', '--key', '--json', '--kv-mount', '--transit-mount', '--help') | Where-Object { $_ -like "$wordToComplete*" }
+            return @('--path', '--config', '--encryption-key', '--key', '--json', '--raw', '--default', '--kv-mount', '--transit-mount', '--help') | Where-Object { $_ -like "$wordToComplete*" }
         }
         { $_ -in @('delete', 'd', 'rm') } {
             return @('--path', '--kv-mount', '--help') | Where-Object { $_ -like "$wordToComplete*" }
@@ -378,7 +415,7 @@ Register-ArgumentCompleter -Native -CommandName vlt -ScriptBlock {
             return @('--config', '--output', '--help') | Where-Object { $_ -like "$wordToComplete*" }
         }
         { $_ -in @('run', 'r') } {
-            return @('--config', '--encryption-key', '--inject', '--env-file', '--kv-mount', '--transit-mount', '--dry-run', '--preserve-env', '--help') | Where-Object { $_ -like "$wordToComplete*" }
+            return @('--config', '--encryption-key', '--inject', '--env-file', '--kv-mount', '--transit-mount', '--dry-run', '--preserve-env', '--strict', '--prefix', '--help') | Where-Object { $_ -like "$wordToComplete*" }
         }
         { $_ -in @('json', 'j') } {
             return @('--encryption-key', '--transit-mount', '--help') | Where-Object { $_ -like "$wordToComplete*" }

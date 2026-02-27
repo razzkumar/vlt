@@ -5,11 +5,18 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/joho/godotenv"
 	"github.com/razzkumar/vlt/pkg/vault"
 )
+
+// containsDotDot checks if a cleaned path still contains ".." path components
+func containsDotDot(path string) bool {
+	return slices.Contains(strings.Split(path, string(filepath.Separator)), "..")
+}
 
 // LoadEnvFileAsPlaintext loads a .env file and returns plaintext data map (no vault client needed)
 func LoadEnvFileAsPlaintext(path string) (map[string]any, error) {
@@ -72,11 +79,14 @@ func SaveAsFile(filename, base64Content string) error {
 // SaveAsFileWithOptions saves content to file with configurable options
 // Automatically detects if content is base64-encoded or plain text
 func SaveAsFileWithOptions(content string, opts FileStorageOptions) error {
-	// Sanitize the path to prevent path traversal attacks
+	// Sanitize and validate the path to prevent path traversal attacks
 	cleanPath := filepath.Clean(opts.Path)
 	if cleanPath != opts.Path {
-		// Log that the path was cleaned (may indicate traversal attempt)
 		fmt.Fprintf(os.Stderr, "warning: file path was sanitized: %q -> %q\n", opts.Path, cleanPath)
+	}
+	// Reject paths containing ".." after cleaning (traversal attempt)
+	if containsDotDot(cleanPath) {
+		return fmt.Errorf("path traversal not allowed: %s", cleanPath)
 	}
 	opts.Path = cleanPath
 

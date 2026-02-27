@@ -9,21 +9,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Security
 
 - Mask secret values in `run --dry-run` output to prevent accidental exposure
-- Add path traversal protection to file write operations (reject `../` and absolute paths)
+- Add path traversal protection to file write operations via `filepath.Clean` and `..` rejection
 - Add TLS verification skip warning to stderr when `VAULT_SKIP_VERIFY=true` is used
 
 ### Changed
 
 - Version is now injected at build time via `go build -ldflags "-X main.version=..."`
 
-## [1.0.0] - 2024-02-27
+## [1.0.0] - 2026-02-27
 
 ### Added
 
 **Core Secret Management**
 - `put` command: Store single secrets or multiple key-value pairs in Vault KV v2
   - Support for `--value` flag or stdin input
-  - `--from-env` for loading from .env files
+  - `--env-file` for loading from .env files
   - `--from-file` for base64-encoding file content
   - Smart merging with existing multi-value secrets
   - Optional Transit encryption with `--encryption-key`

@@ -111,12 +111,12 @@ func (a *App) Run(opts *RunOptions) error {
 	return a.executeCommand(opts.Command, opts.Args, envVars)
 }
 
-// maskSecret masks a secret value for safe display, showing only the first 4 characters
+// maskSecret masks a secret value for safe display
 func maskSecret(value string) string {
-	if len(value) <= 4 {
-		return "****"
+	if len(value) == 0 {
+		return "(empty)"
 	}
-	return value[:4] + "****"
+	return "****"
 }
 
 // loadEnvFileForRun loads environment variables from a .env file

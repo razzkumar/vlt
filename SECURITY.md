@@ -13,9 +13,7 @@ Only the latest release is actively supported with security fixes.
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in vlt, please report it responsibly by emailing security@example.com instead of using the public issue tracker.
-
-**Important:** Replace `security@example.com` with the actual security contact email when using this project.
+If you discover a security vulnerability in vlt, please report it responsibly by emailing **razzkumar.dev@gmail.com** instead of using the public issue tracker.
 
 In your report, include:
 
