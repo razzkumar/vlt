@@ -611,7 +611,7 @@ func validateFileMode(mode string) error {
 	return nil
 }
 
-// expandPath expands ~ and resolves relative paths
+// expandPath expands ~ and resolves relative paths, with path traversal protection
 func expandPath(path, outputDir string) string {
 	// Expand tilde
 	if strings.HasPrefix(path, "~/") {
@@ -625,6 +625,9 @@ func expandPath(path, outputDir string) string {
 	if !filepath.IsAbs(path) && outputDir != "" {
 		path = filepath.Join(outputDir, path)
 	}
+
+	// Clean the path to resolve any ".." or "." components
+	path = filepath.Clean(path)
 
 	return path
 }

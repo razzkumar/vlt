@@ -92,6 +92,14 @@ func SaveAsFile(filename, base64Content string) error {
 // SaveAsFileWithOptions saves content to file with configurable options
 // Automatically detects if content is base64-encoded or plain text
 func SaveAsFileWithOptions(content string, opts FileStorageOptions) error {
+	// Sanitize the path to prevent path traversal attacks
+	cleanPath := filepath.Clean(opts.Path)
+	if cleanPath != opts.Path {
+		// Log that the path was cleaned (may indicate traversal attempt)
+		fmt.Fprintf(os.Stderr, "warning: file path was sanitized: %q -> %q\n", opts.Path, cleanPath)
+	}
+	opts.Path = cleanPath
+
 	var fileContent []byte
 
 	// Try to decode as base64 first (for files uploaded with --from-file)

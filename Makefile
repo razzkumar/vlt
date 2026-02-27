@@ -3,6 +3,8 @@
 BINARY_NAME=vlt
 BINARY_PATH=./$(BINARY_NAME)
 MAIN_PATH=./cmd/cli
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+LDFLAGS=-ldflags "-X main.version=$(VERSION)"
 
 .PHONY: all build clean install uninstall test test-coverage test-race fmt vet help
 
@@ -10,7 +12,7 @@ all: build
 
 # Build the binary
 build:
-	go build -o $(BINARY_NAME) $(MAIN_PATH)
+	go build $(LDFLAGS) -o $(BINARY_NAME) $(MAIN_PATH)
 
 # Clean build artifacts
 clean:
@@ -54,10 +56,10 @@ deps:
 
 # Build for multiple platforms
 build-all:
-	GOOS=linux GOARCH=amd64 go build -o $(BINARY_NAME)-linux-amd64 $(MAIN_PATH)
-	GOOS=darwin GOARCH=amd64 go build -o $(BINARY_NAME)-darwin-amd64 $(MAIN_PATH)
-	GOOS=darwin GOARCH=arm64 go build -o $(BINARY_NAME)-darwin-arm64 $(MAIN_PATH)
-	GOOS=windows GOARCH=amd64 go build -o $(BINARY_NAME)-windows-amd64.exe $(MAIN_PATH)
+	GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o $(BINARY_NAME)-linux-amd64 $(MAIN_PATH)
+	GOOS=darwin GOARCH=amd64 go build $(LDFLAGS) -o $(BINARY_NAME)-darwin-amd64 $(MAIN_PATH)
+	GOOS=darwin GOARCH=arm64 go build $(LDFLAGS) -o $(BINARY_NAME)-darwin-arm64 $(MAIN_PATH)
+	GOOS=windows GOARCH=amd64 go build $(LDFLAGS) -o $(BINARY_NAME)-windows-amd64.exe $(MAIN_PATH)
 
 # Install shell completions
 completion-bash: build

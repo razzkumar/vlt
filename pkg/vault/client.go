@@ -34,6 +34,9 @@ func NewClient(cfg *config.VaultConfig) (*Client, error) {
 	vaultConfig.Timeout = time.Duration(cfg.Timeout) * time.Second
 
 	if cfg.CACert != "" || cfg.SkipVerify {
+		if cfg.SkipVerify {
+			fmt.Fprintf(os.Stderr, "WARNING: TLS verification is disabled. This is insecure and should only be used for testing.\n")
+		}
 		err := vaultConfig.ConfigureTLS(&vaultapi.TLSConfig{
 			CACert:   cfg.CACert,
 			Insecure: cfg.SkipVerify,

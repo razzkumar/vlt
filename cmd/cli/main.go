@@ -9,13 +9,16 @@ import (
 	vaultcli "github.com/razzkumar/vlt/pkg/cli"
 )
 
+// version is set at build time via -ldflags
+var version = "dev"
+
 func main() {
 	app := &cli.App{
 		Name:  "vlt",
 		Usage: "Minimal secrets management with Vault (optionally with Transit encryption)",
 		Description: `vlt is a CLI tool for managing secrets with HashiCorp Vault using optional Transit encryption.
 It supports storing and retrieving single values or multiple key-value pairs, with smart merging capabilities.`,
-		Version: "1.0.2",
+		Version: version,
 		Authors: []*cli.Author{
 			{
 				Name: "vlt contributors",
