@@ -18,6 +18,7 @@ func GetCommands() []*cli.Command {
 		getGetCommand(),
 		getDeleteCommand(),
 		getListCommand(),
+		getCopyCommand(),
 		getExportCommand(),
 		getImportCommand(),
 		getSyncCommand(),
@@ -294,6 +295,109 @@ Examples:
 
 			fmt.Fprintf(os.Stderr, "Secret deleted: %s\n", opts.Path)
 			return nil
+		},
+	}
+}
+
+func getCopyCommand() *cli.Command {
+	return &cli.Command{
+		Name:    "copy",
+		Usage:   "Copy secrets from one path to another",
+		Aliases: []string{"c", "cp"},
+		Description: `Copy secrets from one Vault KV path to another. Data is copied as-is (raw copy).
+
+Supports both single-path and config-file modes:
+
+Single path mode:
+  vlt copy --from secrets/app/config --to secrets/app/config-backup
+
+Config file mode (YAML with source/dest pairs):
+  vlt copy --config copy-config.yaml
+
+Config file format:
+  copies:
+    - from: secrets/app/config
+      to: secrets/app/config-backup
+    - from: secrets/db/creds
+      to: secrets/db/creds-backup
+
+Examples:
+  # Copy a secret to a new path
+  vlt copy --from secrets/myapp/config --to secrets/myapp/config-backup
+
+  # Copy with custom KV mount
+  vlt copy --from myapp/config --to myapp/backup --kv-mount secret
+
+  # Overwrite existing destination
+  vlt copy --from myapp/config --to myapp/backup --force
+
+  # Copy multiple paths from config file
+  vlt copy --config copy-config.yaml --force`,
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:  "from",
+				Usage: "Source KV path to copy from",
+			},
+			&cli.StringFlag{
+				Name:  "to",
+				Usage: "Destination KV path to copy to",
+			},
+			&cli.StringFlag{
+				Name:  "config",
+				Usage: "YAML config file with copy pairs (copies: [{from, to}])",
+			},
+			&cli.StringFlag{
+				Name:  "kv-mount",
+				Usage: "KV v2 mount path",
+				Value: "home",
+			},
+			&cli.BoolFlag{
+				Name:  "force",
+				Usage: "Overwrite if destination already exists",
+			},
+		},
+		Action: func(ctx *cli.Context) error {
+			configFile := ctx.String("config")
+			from := ctx.String("from")
+			to := ctx.String("to")
+
+			if configFile == "" && from == "" && to == "" {
+				return fmt.Errorf("either --from/--to or --config must be specified")
+			}
+
+			if configFile != "" && (from != "" || to != "") {
+				return fmt.Errorf("cannot use --from/--to with --config")
+			}
+
+			if configFile == "" {
+				if from == "" {
+					return fmt.Errorf("--from is required")
+				}
+				if to == "" {
+					return fmt.Errorf("--to is required")
+				}
+			}
+
+			appInstance, err := app.New()
+			if err != nil {
+				return fmt.Errorf("failed to create app: %w", err)
+			}
+
+			if configFile != "" {
+				return appInstance.CopyFromConfig(configFile, &app.CopyConfigOptions{
+					KVMount: ctx.String("kv-mount"),
+					Force:   ctx.Bool("force"),
+				})
+			}
+
+			opts := &app.CopyOptions{
+				KVMount:    ctx.String("kv-mount"),
+				SourcePath: from,
+				DestPath:   to,
+				Force:      ctx.Bool("force"),
+			}
+
+			return appInstance.Copy(opts)
 		},
 	}
 }
@@ -854,7 +958,7 @@ _vlt_completion() {
     
     # Complete commands
     if [[ ${COMP_CWORD} -eq 1 ]]; then
-        opts="put get sync run json completion help"
+        opts="put get delete list copy export import sync run json completion help"
         COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) )
         return 0
     fi
@@ -866,6 +970,21 @@ _vlt_completion() {
             ;;
         get|g)
             opts="--path --config --encryption-key --key --json --kv-mount --transit-mount --help"
+            ;;
+        delete|d|rm)
+            opts="--path --kv-mount --help"
+            ;;
+        list|ls)
+            opts="--path --kv-mount --help"
+            ;;
+        copy|c|cp)
+            opts="--from --to --config --kv-mount --force --help"
+            ;;
+        export|exp)
+            opts="--path --output --format --encryption-key --kv-mount --transit-mount --help"
+            ;;
+        import|imp)
+            opts="--path --input --format --encryption-key --merge --kv-mount --transit-mount --help"
             ;;
         sync|s)
             opts="--config --output --help"
@@ -938,6 +1057,27 @@ _vlt() {
                         '--transit-mount=[Transit mount path]:mount:' \
                         '--help[Show help]'
                     ;;
+                delete|d|rm)
+                    _arguments \
+                        '--path=[KV path of secret to delete]:path:' \
+                        '--kv-mount=[KV v2 mount path]:mount:' \
+                        '--help[Show help]'
+                    ;;
+                list|ls)
+                    _arguments \
+                        '--path=[KV path to list]:path:' \
+                        '--kv-mount=[KV v2 mount path]:mount:' \
+                        '--help[Show help]'
+                    ;;
+                copy|c|cp)
+                    _arguments \
+                        '--from=[Source KV path to copy from]:path:' \
+                        '--to=[Destination KV path to copy to]:path:' \
+                        '--config=[YAML config file with copy pairs]:file:_files' \
+                        '--kv-mount=[KV v2 mount path]:mount:' \
+                        '--force[Overwrite if destination exists]' \
+                        '--help[Show help]'
+                    ;;
                 sync|s)
                     _arguments \
                         '--config=[YAML config file]:file:_files' \
@@ -976,6 +1116,11 @@ _vlt_commands() {
     commands=(
         'put:Store/update secrets in Vault'
         'get:Retrieve and decrypt secrets from Vault'
+        'delete:Delete a secret from Vault'
+        'list:List secrets at a path in Vault'
+        'copy:Copy secrets from one path to another'
+        'export:Export secrets from Vault to a file'
+        'import:Import secrets from a file to Vault'
         'sync:Sync secrets from YAML config to .env file'
         'run:Run command with secrets injected as environment variables'
         'json:Encrypt .env file content and output as JSON'
@@ -1000,11 +1145,19 @@ complete -c vlt -f -n '__fish_use_subcommand' -a 'sync' -d 'Sync secrets from YA
 complete -c vlt -f -n '__fish_use_subcommand' -a 'run' -d 'Run command with secrets injected as environment variables'
 complete -c vlt -f -n '__fish_use_subcommand' -a 'json' -d 'Encrypt .env file content and output as JSON'
 complete -c vlt -f -n '__fish_use_subcommand' -a 'completion' -d 'Generate shell completion scripts'
+complete -c vlt -f -n '__fish_use_subcommand' -a 'copy' -d 'Copy secrets from one path to another'
 complete -c vlt -f -n '__fish_use_subcommand' -a 'help' -d 'Show help'
 
 # Aliases
 complete -c vlt -f -n '__fish_use_subcommand' -a 'p' -d 'Store/update secrets in Vault (alias)'
 complete -c vlt -f -n '__fish_use_subcommand' -a 'g' -d 'Retrieve and decrypt secrets from Vault (alias)'
+complete -c vlt -f -n '__fish_use_subcommand' -a 'd' -d 'Delete a secret from Vault (alias)'
+complete -c vlt -f -n '__fish_use_subcommand' -a 'rm' -d 'Delete a secret from Vault (alias)'
+complete -c vlt -f -n '__fish_use_subcommand' -a 'ls' -d 'List secrets at a path in Vault (alias)'
+complete -c vlt -f -n '__fish_use_subcommand' -a 'c' -d 'Copy secrets from one path to another (alias)'
+complete -c vlt -f -n '__fish_use_subcommand' -a 'cp' -d 'Copy secrets from one path to another (alias)'
+complete -c vlt -f -n '__fish_use_subcommand' -a 'exp' -d 'Export secrets from Vault to a file (alias)'
+complete -c vlt -f -n '__fish_use_subcommand' -a 'imp' -d 'Import secrets from a file to Vault (alias)'
 complete -c vlt -f -n '__fish_use_subcommand' -a 's' -d 'Sync secrets from YAML config to .env file (alias)'
 complete -c vlt -f -n '__fish_use_subcommand' -a 'r' -d 'Run command with secrets injected as environment variables (alias)'
 complete -c vlt -f -n '__fish_use_subcommand' -a 'j' -d 'Encrypt .env file content and output as JSON (alias)'
@@ -1019,6 +1172,13 @@ complete -c vlt -f -n '__fish_seen_subcommand_from put p' -l 'from-env' -d 'Load
 complete -c vlt -f -n '__fish_seen_subcommand_from put p' -l 'from-file' -d 'Load file content as base64 encoded value'
 complete -c vlt -f -n '__fish_seen_subcommand_from put p' -l 'kv-mount' -d 'KV v2 mount path'
 complete -c vlt -f -n '__fish_seen_subcommand_from put p' -l 'transit-mount' -d 'Transit mount path'
+
+# Copy command options
+complete -c vlt -f -n '__fish_seen_subcommand_from copy c cp' -l 'from' -d 'Source KV path to copy from'
+complete -c vlt -f -n '__fish_seen_subcommand_from copy c cp' -l 'to' -d 'Destination KV path to copy to'
+complete -c vlt -f -n '__fish_seen_subcommand_from copy c cp' -l 'config' -d 'YAML config file with copy pairs'
+complete -c vlt -f -n '__fish_seen_subcommand_from copy c cp' -l 'kv-mount' -d 'KV v2 mount path'
+complete -c vlt -f -n '__fish_seen_subcommand_from copy c cp' -l 'force' -d 'Overwrite if destination exists'
 
 # Get command options
 complete -c vlt -f -n '__fish_seen_subcommand_from get g' -l 'path' -d 'KV path to retrieve secret'
@@ -1070,8 +1230,8 @@ func generatePowerShellCompletion(ctx *cli.Context) error {
 Register-ArgumentCompleter -Native -CommandName vlt -ScriptBlock {
     param($commandName, $wordToComplete, $cursorPosition)
     
-    $commands = @('put', 'get', 'sync', 'run', 'json', 'completion', 'help')
-    $aliases = @('p', 'g', 's', 'r', 'j', 'comp', 'h')
+    $commands = @('put', 'get', 'delete', 'list', 'copy', 'export', 'import', 'sync', 'run', 'json', 'completion', 'help')
+    $aliases = @('p', 'g', 'd', 'rm', 'ls', 'c', 'cp', 'exp', 'imp', 's', 'r', 'j', 'comp', 'h')
     
     # Split the command line
     $commandElements = $wordToComplete.Split(' ', [System.StringSplitOptions]::RemoveEmptyEntries)
@@ -1088,6 +1248,21 @@ Register-ArgumentCompleter -Native -CommandName vlt -ScriptBlock {
         }
         { $_ -in @('get', 'g') } {
             return @('--path', '--config', '--encryption-key', '--key', '--json', '--kv-mount', '--transit-mount', '--help') | Where-Object { $_ -like "$wordToComplete*" }
+        }
+        { $_ -in @('delete', 'd', 'rm') } {
+            return @('--path', '--kv-mount', '--help') | Where-Object { $_ -like "$wordToComplete*" }
+        }
+        { $_ -in @('list', 'ls') } {
+            return @('--path', '--kv-mount', '--help') | Where-Object { $_ -like "$wordToComplete*" }
+        }
+        { $_ -in @('copy', 'c', 'cp') } {
+            return @('--from', '--to', '--config', '--kv-mount', '--force', '--help') | Where-Object { $_ -like "$wordToComplete*" }
+        }
+        { $_ -in @('export', 'exp') } {
+            return @('--path', '--output', '--format', '--encryption-key', '--kv-mount', '--transit-mount', '--help') | Where-Object { $_ -like "$wordToComplete*" }
+        }
+        { $_ -in @('import', 'imp') } {
+            return @('--path', '--input', '--format', '--encryption-key', '--merge', '--kv-mount', '--transit-mount', '--help') | Where-Object { $_ -like "$wordToComplete*" }
         }
         { $_ -in @('sync', 's') } {
             return @('--config', '--output', '--help') | Where-Object { $_ -like "$wordToComplete*" }
