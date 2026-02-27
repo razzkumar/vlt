@@ -52,26 +52,6 @@ func LoadEnvFile(path string, client vault.VaultClient, transitMount, keyName st
 	return data, nil
 }
 
-// LoadFileAsBase64 reads a file and encodes it as base64
-func LoadFileAsBase64(path string, client vault.VaultClient, transitMount, keyName string, useEncryption bool) (map[string]any, error) {
-	fileContent, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read file: %w", err)
-	}
-
-	base64Content := base64.StdEncoding.EncodeToString(fileContent)
-
-	if useEncryption {
-		ciphertext, err := client.TransitEncrypt(transitMount, keyName, []byte(base64Content))
-		if err != nil {
-			return nil, fmt.Errorf("encrypt file content: %w", err)
-		}
-		return map[string]any{"ciphertext": ciphertext}, nil
-	}
-
-	return map[string]any{"value": base64Content}, nil
-}
-
 // FileStorageOptions holds options for file storage
 type FileStorageOptions struct {
 	Path      string // Full path where the file should be saved

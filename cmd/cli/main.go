@@ -73,40 +73,6 @@ It supports storing and retrieving single values or multiple key-value pairs, wi
 				EnvVars: []string{"VAULT_K8S_ROLE"},
 			},
 		},
-		Before: func(ctx *cli.Context) error {
-			// Legacy: Set environment variables from flags if provided
-			// TODO: Refactor commands to use app.NewWithOverrides() instead
-			// This env mutation pattern exists for backward compatibility
-			if addr := ctx.String("vault-addr"); addr != "" {
-				os.Setenv("VAULT_ADDR", addr)
-			}
-			if token := ctx.String("vault-token"); token != "" {
-				os.Setenv("VAULT_TOKEN", token)
-			}
-			if namespace := ctx.String("vault-namespace"); namespace != "" {
-				os.Setenv("VAULT_NAMESPACE", namespace)
-			}
-			if encKey := ctx.String("encryption-key"); encKey != "" {
-				os.Setenv("ENCRYPTION_KEY", encKey)
-			}
-			// Auth method environment variables
-			if authMethod := ctx.String("vault-auth-method"); authMethod != "" {
-				os.Setenv("VAULT_AUTH_METHOD", authMethod)
-			}
-			if roleID := ctx.String("vault-role-id"); roleID != "" {
-				os.Setenv("VAULT_ROLE_ID", roleID)
-			}
-			if secretID := ctx.String("vault-secret-id"); secretID != "" {
-				os.Setenv("VAULT_SECRET_ID", secretID)
-			}
-			if githubToken := ctx.String("vault-github-token"); githubToken != "" {
-				os.Setenv("VAULT_GITHUB_TOKEN", githubToken)
-			}
-			if k8sRole := ctx.String("vault-k8s-role"); k8sRole != "" {
-				os.Setenv("VAULT_K8S_ROLE", k8sRole)
-			}
-			return nil
-		},
 		UsageText: `vlt [global options] command [command options] [arguments...]
 
 ENVIRONMENT VARIABLES:

@@ -102,7 +102,7 @@ func getPutCommand() *cli.Command {
 				return fmt.Errorf("--key cannot be used with --env-file or --from-file")
 			}
 
-			appInstance, err := app.New()
+			appInstance, err := app.NewWithOverrides(getOverridesFromContext(ctx))
 			if err != nil {
 				return fmt.Errorf("failed to create app: %w", err)
 			}
@@ -215,7 +215,7 @@ Examples:
 				return fmt.Errorf("either --path, --config, or config file (VLT_CONFIG env, ./.vlt.yaml, ~/.vlt.yaml) must be specified")
 			}
 
-			appInstance, err := app.New()
+			appInstance, err := app.NewWithOverrides(getOverridesFromContext(ctx))
 			if err != nil {
 				return fmt.Errorf("failed to create app: %w", err)
 			}
@@ -279,7 +279,7 @@ Examples:
 			},
 		},
 		Action: func(ctx *cli.Context) error {
-			appInstance, err := app.New()
+			appInstance, err := app.NewWithOverrides(getOverridesFromContext(ctx))
 			if err != nil {
 				return fmt.Errorf("failed to create app: %w", err)
 			}
@@ -378,7 +378,7 @@ Examples:
 				}
 			}
 
-			appInstance, err := app.New()
+			appInstance, err := app.NewWithOverrides(getOverridesFromContext(ctx))
 			if err != nil {
 				return fmt.Errorf("failed to create app: %w", err)
 			}
@@ -432,7 +432,7 @@ Examples:
 			},
 		},
 		Action: func(ctx *cli.Context) error {
-			appInstance, err := app.New()
+			appInstance, err := app.NewWithOverrides(getOverridesFromContext(ctx))
 			if err != nil {
 				return fmt.Errorf("failed to create app: %w", err)
 			}
@@ -511,7 +511,7 @@ Examples:
 			},
 		},
 		Action: func(ctx *cli.Context) error {
-			appInstance, err := app.New()
+			appInstance, err := app.NewWithOverrides(getOverridesFromContext(ctx))
 			if err != nil {
 				return fmt.Errorf("failed to create app: %w", err)
 			}
@@ -586,7 +586,7 @@ Examples:
 			},
 		},
 		Action: func(ctx *cli.Context) error {
-			appInstance, err := app.New()
+			appInstance, err := app.NewWithOverrides(getOverridesFromContext(ctx))
 			if err != nil {
 				return fmt.Errorf("failed to create app: %w", err)
 			}
@@ -629,7 +629,7 @@ func getSyncCommand() *cli.Command {
 			},
 		},
 		Action: func(ctx *cli.Context) error {
-			appInstance, err := app.New()
+			appInstance, err := app.NewWithOverrides(getOverridesFromContext(ctx))
 			if err != nil {
 				return fmt.Errorf("failed to create app: %w", err)
 			}
@@ -741,7 +741,7 @@ First found config will be used automatically if no --config is specified.`,
 				return fmt.Errorf("command to run is required. Use -- to separate vlt options from the command")
 			}
 
-			appInstance, err := app.New()
+			appInstance, err := app.NewWithOverrides(getOverridesFromContext(ctx))
 			if err != nil {
 				return fmt.Errorf("failed to create app: %w", err)
 			}
@@ -833,7 +833,7 @@ Examples:
 			}
 
 			// For encryption, create app with vault client
-			appInstance, err := app.New()
+			appInstance, err := app.NewWithOverrides(getOverridesFromContext(ctx))
 			if err != nil {
 				return fmt.Errorf("failed to create app: %w", err)
 			}
@@ -846,6 +846,20 @@ Examples:
 
 			return appInstance.JSON(opts)
 		},
+	}
+}
+
+// getOverridesFromContext extracts VaultConfig overrides from CLI flags
+func getOverridesFromContext(ctx *cli.Context) *config.VaultConfigOverrides {
+	return &config.VaultConfigOverrides{
+		Addr:        ctx.String("vault-addr"),
+		Token:       ctx.String("vault-token"),
+		Namespace:   ctx.String("vault-namespace"),
+		AuthMethod:  ctx.String("vault-auth-method"),
+		RoleID:      ctx.String("vault-role-id"),
+		SecretID:    ctx.String("vault-secret-id"),
+		GitHubToken: ctx.String("vault-github-token"),
+		K8sRole:     ctx.String("vault-k8s-role"),
 	}
 }
 

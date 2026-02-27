@@ -15,6 +15,10 @@ var envVarNameRegex = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 // Cannot start or end with slash, no double slashes
 var vaultPathRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]+(/[a-zA-Z0-9_-]+)*$`)
 
+// Secret key validation
+// Valid: starts with letter or underscore, contains alphanumeric, underscores, hyphens, and dots
+var secretKeyRegex = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_.-]*$`)
+
 // ValidateEnvVarName checks if a string is a valid environment variable name
 func ValidateEnvVarName(name string) error {
 	if name == "" {
@@ -60,8 +64,7 @@ func ValidateSecretKey(key string) error {
 	}
 
 	// Secret keys are similar to env var names but can also contain hyphens and dots
-	keyRegex := regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_.-]*$`)
-	if !keyRegex.MatchString(key) {
+	if !secretKeyRegex.MatchString(key) {
 		return fmt.Errorf("invalid secret key %q: must start with letter or underscore, contain only alphanumeric characters, underscores, hyphens, and dots", key)
 	}
 
