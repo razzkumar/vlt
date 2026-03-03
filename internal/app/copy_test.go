@@ -12,14 +12,14 @@ import (
 
 func TestAppCopy(t *testing.T) {
 	tests := []struct {
-		name        string
-		opts        *CopyOptions
-		setupMock   func(*vault.MockClient)
-		wantErr     bool
-		errMsg      string
-		wantGetN    int
-		wantPutN    int
-		verifyPut   func(*testing.T, *vault.MockClient)
+		name      string
+		opts      *CopyOptions
+		setupMock func(*vault.MockClient)
+		wantErr   bool
+		errMsg    string
+		wantGetN  int
+		wantPutN  int
+		verifyPut func(*testing.T, *vault.MockClient)
 	}{
 		{
 			name: "copy single key secret",
@@ -249,13 +249,13 @@ func TestAppCopy(t *testing.T) {
 
 func TestAppCopyFromConfig(t *testing.T) {
 	tests := []struct {
-		name      string
+		name       string
 		configYAML string
-		setupMock func(*vault.MockClient)
-		opts      *CopyConfigOptions
-		wantErr   bool
-		errMsg    string
-		wantPutN  int
+		setupMock  func(*vault.MockClient)
+		opts       *CopyConfigOptions
+		wantErr    bool
+		errMsg     string
+		wantPutN   int
 	}{
 		{
 			name: "multiple copy pairs",

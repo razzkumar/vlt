@@ -401,7 +401,10 @@ secrets:
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	err := app.GetFromConfig(configFile, "", false)
+	err := app.GetFromConfigWithOptions(configFile, &GetFromConfigOptions{
+		EncryptionKey: "",
+		OutputJSON:    false,
+	})
 
 	w.Close()
 	os.Stdout = oldStdout

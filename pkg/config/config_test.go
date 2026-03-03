@@ -1041,8 +1041,8 @@ func TestValidateFileMode(t *testing.T) {
 		{"1755", false}, // with sticky bit
 		{"", true},
 		{"invalid", true},
-		{"0999", true},   // invalid octal
-		{"08", true},     // too short
+		{"0999", true},     // invalid octal
+		{"08", true},       // too short
 		{"01234567", true}, // too long
 	}
 

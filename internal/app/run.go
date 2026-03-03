@@ -97,11 +97,11 @@ func (a *App) Run(opts *RunOptions) error {
 		}
 	}
 
-	// If dry-run, just print the environment variables
+	// If dry-run, just print the environment variable names (values are masked for security)
 	if opts.DryRun {
 		fmt.Println("Environment variables that would be set:")
 		for k, v := range envVars {
-			fmt.Printf("%s=%s\n", k, v)
+			fmt.Printf("%s=%s\n", k, maskSecret(v))
 		}
 		fmt.Printf("\nCommand that would be executed: %s %s\n", opts.Command, strings.Join(opts.Args, " "))
 		return nil
@@ -109,6 +109,14 @@ func (a *App) Run(opts *RunOptions) error {
 
 	// Execute the command
 	return a.executeCommand(opts.Command, opts.Args, envVars)
+}
+
+// maskSecret masks a secret value for safe display
+func maskSecret(value string) string {
+	if len(value) == 0 {
+		return "(empty)"
+	}
+	return "****"
 }
 
 // loadEnvFileForRun loads environment variables from a .env file

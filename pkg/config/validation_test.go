@@ -109,11 +109,11 @@ func TestValidateSecretKey(t *testing.T) {
 
 func TestValidateInjectFormat(t *testing.T) {
 	tests := []struct {
-		name         string
-		input        string
-		wantEnvVar   string
-		wantPath     string
-		wantErr      bool
+		name       string
+		input      string
+		wantEnvVar string
+		wantPath   string
+		wantErr    bool
 	}{
 		// Valid cases
 		{"simple", "FOO=secrets/foo", "FOO", "secrets/foo", false},

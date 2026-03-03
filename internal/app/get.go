@@ -165,15 +165,6 @@ type GetFromConfigOptions struct {
 	OutputJSON    bool
 }
 
-// GetFromConfig retrieves secrets from config file and displays them (legacy method)
-func (a *App) GetFromConfig(configPath, encryptionKey string, outputJSON bool) error {
-	opts := &GetFromConfigOptions{
-		EncryptionKey: encryptionKey,
-		OutputJSON:    outputJSON,
-	}
-	return a.GetFromConfigWithOptions(configPath, opts)
-}
-
 // GetFromConfigWithOptions retrieves secrets from config file with file storage options
 func (a *App) GetFromConfigWithOptions(configPath string, opts *GetFromConfigOptions) error {
 	cfg, err := a.LoadConfig(configPath)

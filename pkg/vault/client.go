@@ -17,6 +17,14 @@ import (
 	"github.com/razzkumar/vlt/pkg/config"
 )
 
+// Sentinel errors for common Vault operation failures
+var (
+	// ErrSecretNotFound is returned when a secret path has no data in Vault
+	ErrSecretNotFound = errors.New("secret not found")
+	// ErrUnexpectedFormat is returned when KV v2 response has unexpected structure
+	ErrUnexpectedFormat = errors.New("unexpected kv v2 format")
+)
+
 // Client wraps the Vault API client with our specific functionality
 type Client struct {
 	client *vaultapi.Client
@@ -34,6 +42,9 @@ func NewClient(cfg *config.VaultConfig) (*Client, error) {
 	vaultConfig.Timeout = time.Duration(cfg.Timeout) * time.Second
 
 	if cfg.CACert != "" || cfg.SkipVerify {
+		if cfg.SkipVerify {
+			fmt.Fprintf(os.Stderr, "WARNING: TLS verification is disabled. This is insecure and should only be used for testing.\n")
+		}
 		err := vaultConfig.ConfigureTLS(&vaultapi.TLSConfig{
 			CACert:   cfg.CACert,
 			Insecure: cfg.SkipVerify,
@@ -158,12 +169,12 @@ func (c *Client) KVGet(mount, path string) (map[string]interface{}, error) {
 	}
 
 	if secret == nil || secret.Data == nil {
-		return nil, errors.New("no data returned from vault")
+		return nil, ErrSecretNotFound
 	}
 
 	inner, ok := secret.Data["data"].(map[string]interface{})
 	if !ok {
-		return nil, errors.New("unexpected kv v2 format: missing 'data' field")
+		return nil, fmt.Errorf("%w: missing 'data' field", ErrUnexpectedFormat)
 	}
 
 	return inner, nil

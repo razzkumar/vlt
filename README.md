@@ -1,59 +1,15 @@
 # vlt
 
-A professional CLI tool for managing secrets with HashiCorp Vault using optional Transit encryption, inspired by [vaultx](https://github.com/hashicorp/vault) and [teller](https://github.com/tellerops/teller).
-
-**Version 2.0** features a complete rewrite with modern Go practices, proper project structure, and enhanced libraries.
-
-## Architecture
-
-```
-vlt/
-├── cmd/vlt/          # Main application entry point
-├── pkg/
-│   ├── config/             # Configuration management
-│   ├── vault/              # Vault client wrapper
-│   └── cli/                # CLI command definitions
-├── internal/
-│   ├── app/                # Application business logic
-│   └── utils/              # Utility functions
-└── examples/               # Example configurations
-```
+A minimal CLI tool for managing secrets with HashiCorp Vault, supporting optional Transit encryption.
 
 ## Features
 
-- **put**: Store secrets in Vault (optionally with Transit encryption)
-  - Single key-value pairs
-  - Multiple values from .env files
-  - File content as base64-encoded values
-- **get**: Retrieve and optionally decrypt secrets from Vault
-  - Single values or multi-value retrieval
-  - JSON or .env format output
-  - Specific subkey extraction
-- **env**: Generate .env file from multiple Vault secrets
-- **sync**: Sync secrets from YAML config to .env file
-
-**Encryption Options:**
-- **Transit encryption (default)**: Secrets encrypted using Vault's Transit engine before storage
-- **Plaintext storage**: Option to store secrets without additional encryption
-- **Flexible key requirement**: Transit key only required when encryption is enabled
-
-## Documentation
-
-- [vlt Guide](docs/GUIDE.md)
-
-## Built With
-
-- **[urfave/cli v2](https://github.com/urfave/cli)** - Modern CLI framework with advanced features
-- **[joho/godotenv](https://github.com/joho/godotenv)** - Professional .env file parsing
-- **[HashiCorp Vault API](https://github.com/hashicorp/vault/api)** - Official Vault Go client
-
-## Requirements
-
-- HashiCorp Vault server with:
-  - Transit secrets engine enabled (default mount: `transit`)
-  - KV v2 secrets engine enabled (default mount: `kv`) 
-  - A transit encryption key created
-- Go 1.21+ (for building from source)
+- **11 commands**: put, get, delete, list, copy, export, import, sync, run, json, completion
+- **Transit encryption**: Optionally encrypt secrets via Vault's Transit engine before storage
+- **Config-driven workflows**: Define secrets in YAML, sync to `.env` files or inject into processes
+- **Multiple auth methods**: Token, AppRole, GitHub, Kubernetes (auto-detected)
+- **File storage**: Save secrets as files with configurable permissions
+- **Smart merging**: Put operations merge with existing data by default
 
 ## Installation
 
@@ -62,273 +18,410 @@ vlt/
 ```bash
 git clone https://github.com/razzkumar/vlt
 cd vlt
-go build -o vlt
+make build
 sudo mv vlt /usr/local/bin/
 ```
 
-### Environment Variables
+### Pre-built Binaries
 
-Required:
-- `VAULT_ADDR` - Vault server address (e.g., `https://vault.example.com:8200`)
-- `VAULT_TOKEN` - Vault authentication token
+Download from [GitHub Releases](https://github.com/razzkumar/vlt/releases).
 
-Optional:
-- `VAULT_NAMESPACE` - Vault namespace
-- `VAULT_CACERT` - Path to CA certificate file
-- `VAULT_SKIP_VERIFY` - Skip TLS verification (`1` or `true`)
-
-## Vault Setup
-
-Before using vlt, you need to set up Vault with the required engines and keys:
+### Docker
 
 ```bash
-# Enable KV v2 secrets engine
-vault secrets enable -path=kv kv-v2
-
-# Enable Transit secrets engine  
-vault secrets enable transit
-
-# Create a transit encryption key
-vault write -f transit/keys/app-secrets
+docker build -t vlt .
+docker run --rm -e VAULT_ADDR -e VAULT_TOKEN vlt get --path secrets/myapp
 ```
 
-## Usage
-
-### Store Secrets
+## Quick Start
 
 ```bash
-# Store single secret with encryption (default)
-vlt put --key app-secrets --path myapp/db_password --value "supersecret"
+# Set up Vault connection
+export VAULT_ADDR="https://vault.example.com:8200"
+export VAULT_TOKEN="hvs.your-token"
 
-# Store single secret without encryption
-vlt put --path myapp/db_password --value "supersecret" --no-encrypt
+# Store a secret
+vlt put --path secrets/db_password --value "supersecret"
 
-# Store from stdin
-echo "supersecret" | vlt put --key app-secrets --path myapp/db_password
+# Retrieve it
+vlt get --path secrets/db_password
 
-# Store multiple secrets from .env file
-vlt put --key app-secrets --path myapp/config --from-env production.env
+# Store with Transit encryption
+vlt put --encryption-key mykey --path secrets/db_password --value "supersecret"
 
-# Store file content as base64 (useful for SSH keys, certificates)
-vlt put --key app-secrets --path myapp/ssh_key --from-file ~/.ssh/id_rsa
-```
+# Retrieve and decrypt
+vlt get --encryption-key mykey --path secrets/db_password
 
-### Retrieve Secrets
-
-```bash
-# Get single encrypted secret
-vlt get --key app-secrets --path myapp/db_password
-
-# Get multiple secrets as JSON
-vlt get --key app-secrets --path myapp/config --json
-
-# Get multiple secrets as .env format
-vlt get --key app-secrets --path myapp/config
-
-# Get specific value from multi-value secret
-vlt get --key app-secrets --path myapp/config --subkey AWS_ACCESS_KEY_ID
-
-# Get plaintext secret (no key needed)
-vlt get --path myapp/plaintext_config --subkey EMAIL_FROM
-
-# Use in environment variable
-export DB_PASSWORD=$(vlt get --key app-secrets --path myapp/db_password)
-```
-
-### Generate .env File
-
-Create a configuration file (see `example-config.yaml`):
-
-```yaml
----
-version: 1
-vault:
-  addr: "https://vault.example.com:8200"
-transit:
-  mount: "transit"
-  key: "app-secrets"
-kv:
-  mount: "kv"
-secrets:
-  - name: "Database Password"
-    kv_path: "myapp/prod/db_password"
-    env_var: "DB_PASSWORD"
-    required: true
-  - name: "API Key" 
-    kv_path: "myapp/prod/api_key"
-    env_var: "API_KEY"
-    required: true
-```
-
-Then generate the .env file:
-
-```bash
-# Generate .env from config
-vlt sync --config secrets.yaml --output .env
-
-# Or use the env command with CLI flags
-vlt env --key app-secrets --config secrets.yaml --output .env
+# Run a command with secrets injected
+vlt run --config .vlt.yaml -- ./myapp
 ```
 
 ## Commands
 
-### `put`
+### `put` (alias: `p`)
 
-Store a secret in Vault with Transit encryption.
-
-```bash
-vlt put [flags]
-
-Flags:
-  --key string            Transit key name (required)
-  --path string           KV path to store secret (required)  
-  --value string          Secret value (or use stdin)
-  --kv-mount string       KV v2 mount path (default "kv")
-  --transit-mount string  Transit mount path (default "transit")
-```
-
-### `get`
-
-Retrieve and decrypt a secret from Vault.
+Store or update secrets in Vault. Merges with existing data by default.
 
 ```bash
-vlt get [flags]
+# Store a single secret
+vlt put --path secrets/db_password --value "supersecret"
 
-Flags:
-  --key string            Transit key name (required)
-  --path string           KV path to retrieve secret (required)
-  --kv-mount string       KV v2 mount path (default "kv") 
-  --transit-mount string  Transit mount path (default "transit")
+# Store with Transit encryption
+vlt put --encryption-key mykey --path secrets/db_password --value "supersecret"
+
+# Update a specific key in a multi-value secret
+vlt put --path secrets/myapp --key API_KEY --value "new-api-key"
+
+# Store from .env file (merges with existing)
+vlt put --encryption-key mykey --path secrets/myapp --env-file .env
+
+# Store file as base64 (SSH keys, certificates)
+vlt put --encryption-key mykey --path secrets/ssh_key --from-file ~/.ssh/id_rsa
+
+# Overwrite instead of merging
+vlt put --path secrets/myapp --env-file .env --force
 ```
 
-### `env` 
+**Flags:**
 
-Generate .env file from multiple Vault secrets using a config file.
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--path` | KV path to store secret(s) | *required* |
+| `--value` | Secret value (or use stdin) | |
+| `--key` | Specific key to update in multi-value secret | |
+| `--encryption-key` | Transit encryption key name | |
+| `--env-file` | Load key-value pairs from .env file | `.env` |
+| `--from-file` | Load file content as base64 | |
+| `--kv-mount` | KV v2 mount path | `home` |
+| `--transit-mount` | Transit mount path | `transit` |
+| `--force` | Overwrite existing data instead of merging | `false` |
+| `--dry-run` | Show what would be done without changes | `false` |
+
+### `get` (alias: `g`)
+
+Retrieve and optionally decrypt secrets from Vault.
 
 ```bash
-vlt env [flags]
+# Get all keys from a path
+vlt get --path secrets/myapp
 
-Flags:
-  --key string            Transit key name (required)
-  --config string         YAML config file with secret definitions (required)
-  --output string         Output .env file (default ".env")
-  --kv-mount string       KV v2 mount path (default "kv")
-  --transit-mount string  Transit mount path (default "transit")
+# Get a specific key
+vlt get --path secrets/myapp --key API_KEY
+
+# Get with decryption
+vlt get --encryption-key mykey --path secrets/db_password
+
+# Output as JSON
+vlt get --path secrets/myapp --json
+
+# Get raw value (no trailing newline, for piping)
+vlt get --path secrets/myapp --key API_KEY --raw
+
+# Provide a default if secret not found
+vlt get --path secrets/myapp --key OPTIONAL --default "fallback"
+
+# Get all secrets from config file
+vlt get --config secrets.yaml
+
+# Get from default config (.vlt.yaml)
+vlt get
 ```
 
-### `sync`
+**Flags:**
 
-Sync secrets from YAML config to .env file. Uses configuration from the YAML file for all settings.
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--path` | KV path to retrieve | |
+| `--config` | YAML config file | auto-detected |
+| `--key` | Specific key to retrieve | |
+| `--encryption-key` | Transit encryption key name | |
+| `--json` | Output as JSON | `false` |
+| `--raw` | Output raw value without newline | `false` |
+| `--default` | Default value if not found | |
+| `--kv-mount` | KV v2 mount path | `home` |
+| `--transit-mount` | Transit mount path | `transit` |
+
+### `delete` (aliases: `d`, `rm`)
+
+Delete a secret from Vault.
 
 ```bash
-vlt sync [flags]
-
-Flags:
-  --config string         YAML config file (default "vlt.yaml")
-  --output string         Output .env file (default ".env")
+vlt delete --path secrets/myapp/old-config
 ```
 
-## Configuration File
+### `list` (alias: `ls`)
 
-The YAML configuration file supports the following structure:
+List secrets at a path. Directories shown with trailing `/`.
 
+```bash
+# List at root
+vlt list
+
+# List at a specific path
+vlt list --path secrets/myapp
+```
+
+### `copy` (aliases: `c`, `cp`)
+
+Copy secrets between paths.
+
+```bash
+# Copy a single path
+vlt copy --from secrets/myapp/config --to secrets/myapp/config-backup
+
+# Copy with overwrite
+vlt copy --from secrets/app/v1 --to secrets/app/v2 --force
+
+# Copy multiple paths from config
+vlt copy --config copy-config.yaml
+```
+
+Config file format for bulk copy:
 ```yaml
-version: 1
-vault:
-  addr: "https://vault.example.com:8200"  # optional; else VAULT_ADDR env
-  namespace: ""                           # optional; else VAULT_NAMESPACE env  
-  skip_verify: false                      # optional; else VAULT_SKIP_VERIFY env
-  ca_cert: "/etc/ssl/certs/vault-ca.pem" # optional; else VAULT_CACERT env
-transit:
-  mount: "transit"                        # Transit secrets engine mount
-  key: "app-secrets"                      # Transit encryption key name  
-kv:
-  mount: "kv"                            # KV v2 secrets engine mount
-secrets:
-  - name: "Description"                   # Human readable name
-    kv_path: "path/to/secret"            # Path in KV store
-    env_var: "ENV_VAR_NAME"              # Environment variable name
-    required: true                       # Fail if secret missing (default: false)
+copies:
+  - from: secrets/app/config
+    to: secrets/app/config-backup
+  - from: secrets/db/creds
+    to: secrets/db/creds-backup
 ```
 
-## Security Notes
+### `export` (alias: `exp`)
 
-- All secrets are encrypted using Vault's Transit engine before storage
-- The `.env` file is created with `0600` permissions (owner read/write only)
-- Never commit `.env` files or configuration files containing secrets to version control
-- Use Vault policies to restrict access to secrets and transit keys
-- Consider using short-lived tokens and token renewal for production use
+Export secrets to a file.
 
-## Examples
-
-### Complete Workflow
-
-1. Set up environment:
 ```bash
-export VAULT_ADDR="https://vault.example.com:8200"
-export VAULT_TOKEN="your-vault-token"
+# Export as JSON to stdout
+vlt export --path secrets/myapp
+
+# Export as .env format to file
+vlt export --path secrets/myapp --format env --output .env
+
+# Export with decryption
+vlt export --path secrets/myapp --encryption-key mykey --output secrets.json
 ```
 
-2. Store secrets:
+### `import` (alias: `imp`)
+
+Import secrets from a file. Format auto-detected from extension.
+
 ```bash
-vlt put --key app-secrets --path myapp/db_password --value "db_secret_123"
-vlt put --key app-secrets --path myapp/api_key --value "api_key_456"
+# Import from JSON
+vlt import --path secrets/myapp --input secrets.json
+
+# Import from .env
+vlt import --path secrets/myapp --input .env
+
+# Import with encryption
+vlt import --path secrets/myapp --input secrets.json --encryption-key mykey
+
+# Merge with existing instead of replacing
+vlt import --path secrets/myapp --input new.json --merge
 ```
 
-3. Create config file (`secrets.yaml`):
-```yaml
-version: 1
-transit:
-  key: "app-secrets"
-secrets:
-  - name: "Database Password"
-    kv_path: "myapp/db_password"
-    env_var: "DB_PASSWORD"
-    required: true
-  - name: "API Key"
-    kv_path: "myapp/api_key" 
-    env_var: "API_KEY"
-    required: true
-```
+### `sync` (alias: `s`)
 
-4. Generate .env file:
+Sync secrets from YAML config to `.env` file.
+
 ```bash
+# Sync using default config (.vlt.yaml)
+vlt sync
+
+# Sync with specific config
 vlt sync --config secrets.yaml
+
+# Sync to custom output file
+vlt sync --config secrets.yaml --output .env.local
 ```
 
-5. Use in your application:
+### `run` (alias: `r`)
+
+Run a command with secrets injected as environment variables.
+
 ```bash
-source .env
-echo "DB Password: $DB_PASSWORD"
-echo "API Key: $API_KEY"
+# Run with config file
+vlt run --config secrets.yaml -- go run main.go
+
+# Run with default config (.vlt.yaml auto-detected)
+vlt run -- ./myapp
+
+# Inject specific secrets
+vlt run --inject DB_PASSWORD=secrets/db_password --inject API_KEY=secrets/api_key -- npm start
+
+# Combine config with .env file
+vlt run --config secrets.yaml --env-file .env.local -- python app.py
+
+# Dry run (shows masked variable names, does not execute)
+vlt run --config secrets.yaml --dry-run
+
+# Strict mode (fail if any secret can't be loaded)
+vlt run --config secrets.yaml --strict -- ./myapp
+
+# Add prefix to all injected variables
+vlt run --config secrets.yaml --prefix APP_ -- ./myapp
 ```
 
-## Comparison with Teller
+### `json` (alias: `j`)
 
-While inspired by Teller, vlt is focused specifically on HashiCorp Vault with Transit encryption:
+Convert `.env` file to JSON, optionally with Transit encryption.
 
-| Feature | vlt | Teller |
-|---------|-----------|---------|
-| Vault Support | ✅ Full | ✅ Full |
-| Transit Encryption | ✅ Built-in | ❌ Not supported |
-| Multiple Providers | ❌ Vault only | ✅ Many providers |
-| CLI Simplicity | ✅ Minimal | ⚖️ Feature-rich |
-| Config Format | YAML | YAML/HCL |
+```bash
+# Plaintext JSON from default .env
+vlt json
+
+# Plaintext JSON from specific file
+vlt json example.env
+
+# Encrypted JSON (uses Transit)
+TRANSIT=true vlt json
+
+# Encrypted with custom key
+vlt json --encryption-key mykey
+```
+
+### `completion` (alias: `comp`)
+
+Generate shell completion scripts.
+
+```bash
+# Bash
+vlt completion bash > /etc/bash_completion.d/vlt
+
+# Zsh
+vlt completion zsh > /usr/local/share/zsh/site-functions/_vlt
+
+# Fish
+vlt completion fish > ~/.config/fish/completions/vlt.fish
+
+# PowerShell
+vlt completion powershell > vlt.ps1
+```
+
+## Configuration
+
+### Config File
+
+vlt uses YAML config files. Search order: `VLT_CONFIG` env var, `./.vlt.yaml`, `~/.vlt.yaml`.
+
+```yaml
+vault:
+  addr: "http://localhost:8200"
+  # namespace: ""
+  # skip_verify: false
+  # ca_cert: "/path/to/ca.pem"
+
+# Optional transit configuration (used when TRANSIT=true)
+# transit:
+#   mount: "transit"
+#   key: "app-secrets"
+
+kv:
+  mount: "home"
+
+# Optional file storage settings
+# files:
+#   output_dir: "./secrets"
+#   default_mode: "0600"
+#   create_dirs: true
+
+secrets:
+  # Load all keys from a path into env vars
+  - path: "myapp/config"
+
+  # Load a single key with custom env var name
+  - path: "myapp/database"
+    key: "password"
+    env_key: "DB_PASSWORD"
+
+  # Save a key as a file
+  - path: "myapp/ssh"
+    key: "id_rsa"
+    file:
+      path: "./secrets/id_rsa"
+      mode: "0600"
+      create_dir: true
+```
+
+See [`.vlt.example.yaml`](.vlt.example.yaml) for a complete example.
+
+### Environment Variables
+
+**Vault connection:**
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `VAULT_ADDR` | Vault server address | Yes |
+| `VAULT_TOKEN` | Authentication token (for token auth) | Yes* |
+| `VAULT_NAMESPACE` | Vault namespace | No |
+| `VAULT_CACERT` | CA certificate path | No |
+| `VAULT_SKIP_VERIFY` | Skip TLS verification | No |
+
+**Transit encryption:**
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `TRANSIT` | Enable/disable transit: `true`/`false`, `1`/`0`, `yes`/`no` | `false` |
+| `ENCRYPTION_KEY` | Transit encryption key name | `app-secrets` (when TRANSIT=true) |
+| `TRANSIT_MOUNT` | Transit mount path | `transit` |
+
+**Authentication (auto-detected based on which variables are set):**
+
+| Variable | Auth Method |
+|----------|-------------|
+| `VAULT_TOKEN` | Token (default) |
+| `VAULT_ROLE_ID` + `VAULT_SECRET_ID` | AppRole |
+| `VAULT_GITHUB_TOKEN` | GitHub |
+| `VAULT_K8S_ROLE` | Kubernetes |
+
+Detection order: token > approle > github > kubernetes.
+
+## Vault Setup
+
+```bash
+# Enable KV v2 secrets engine
+vault secrets enable -path=home kv-v2
+
+# (Optional) Enable Transit for encryption
+vault secrets enable transit
+vault write -f transit/keys/app-secrets
+```
+
+## Architecture
+
+```
+cmd/cli/main.go          Entry point, global flags
+pkg/cli/
+  commands.go             CLI command definitions
+  completion.go           Shell completion generators
+pkg/vault/
+  interface.go            VaultClient interface
+  client.go               Real Vault API implementation
+  mock_client.go          Mock for testing
+pkg/config/               Config structs, env var loading, YAML parsing, validation
+internal/app/             Business logic (one file per command)
+internal/utils/           Encryption helpers, file ops, output formatting
+```
+
+## Development
+
+```bash
+make build           # Build binary
+make test            # Run tests
+make test-race       # Run tests with race detector
+make test-coverage   # Generate coverage report
+make fmt             # Format code
+make vet             # Static analysis
+make deps            # Download and tidy dependencies
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for full contributing guidelines.
+
+## Documentation
+
+- [Usage Guide](docs/GUIDE.md) — detailed walkthrough of all features
+- [Contributing](CONTRIBUTING.md) — development setup and conventions
+- [Security Policy](SECURITY.md) — vulnerability reporting
+- [Changelog](CHANGELOG.md) — version history
 
 ## License
 
-MIT License - see LICENSE file for details.
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable  
-5. Submit a pull request
-
-## Support
-
-For issues and questions:
-- Create an issue in the GitHub repository
-- Check Vault documentation for setup and configuration help
+MIT License — see [LICENSE](LICENSE) for details.

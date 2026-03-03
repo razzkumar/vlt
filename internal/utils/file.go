@@ -5,11 +5,18 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/joho/godotenv"
 	"github.com/razzkumar/vlt/pkg/vault"
 )
+
+// containsDotDot checks if a cleaned path still contains ".." path components
+func containsDotDot(path string) bool {
+	return slices.Contains(strings.Split(path, string(filepath.Separator)), "..")
+}
 
 // LoadEnvFileAsPlaintext loads a .env file and returns plaintext data map (no vault client needed)
 func LoadEnvFileAsPlaintext(path string) (map[string]any, error) {
@@ -52,26 +59,6 @@ func LoadEnvFile(path string, client vault.VaultClient, transitMount, keyName st
 	return data, nil
 }
 
-// LoadFileAsBase64 reads a file and encodes it as base64
-func LoadFileAsBase64(path string, client vault.VaultClient, transitMount, keyName string, useEncryption bool) (map[string]any, error) {
-	fileContent, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read file: %w", err)
-	}
-
-	base64Content := base64.StdEncoding.EncodeToString(fileContent)
-
-	if useEncryption {
-		ciphertext, err := client.TransitEncrypt(transitMount, keyName, []byte(base64Content))
-		if err != nil {
-			return nil, fmt.Errorf("encrypt file content: %w", err)
-		}
-		return map[string]any{"ciphertext": ciphertext}, nil
-	}
-
-	return map[string]any{"value": base64Content}, nil
-}
-
 // FileStorageOptions holds options for file storage
 type FileStorageOptions struct {
 	Path      string // Full path where the file should be saved
@@ -92,6 +79,17 @@ func SaveAsFile(filename, base64Content string) error {
 // SaveAsFileWithOptions saves content to file with configurable options
 // Automatically detects if content is base64-encoded or plain text
 func SaveAsFileWithOptions(content string, opts FileStorageOptions) error {
+	// Sanitize and validate the path to prevent path traversal attacks
+	cleanPath := filepath.Clean(opts.Path)
+	if cleanPath != opts.Path {
+		fmt.Fprintf(os.Stderr, "warning: file path was sanitized: %q -> %q\n", opts.Path, cleanPath)
+	}
+	// Reject paths containing ".." after cleaning (traversal attempt)
+	if containsDotDot(cleanPath) {
+		return fmt.Errorf("path traversal not allowed: %s", cleanPath)
+	}
+	opts.Path = cleanPath
+
 	var fileContent []byte
 
 	// Try to decode as base64 first (for files uploaded with --from-file)
