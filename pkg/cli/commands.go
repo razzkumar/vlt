@@ -637,7 +637,7 @@ func getSyncCommand() *cli.Command {
 			return appInstance.GenerateEnvFile(
 				ctx.String("config"),
 				ctx.String("output"),
-				"", // encryption key will be taken from config or environment
+				ctx.String("encryption-key"),
 			)
 		},
 	}
