@@ -274,24 +274,91 @@ func (a *App) handleFileEntry(cfg *config.Config, secret *config.SecretEntry, kv
 
 // handleDirEntry processes a directory entry from the config and saves all keys as individual files
 func (a *App) handleDirEntry(cfg *config.Config, secret *config.SecretEntry, kvMount, transitMount, encryptionKey string) error {
+	mount := config.NonEmpty("", cfg.KV.Mount, kvMount)
+
+	if secret.Recursive {
+		return a.handleDirEntryRecursive(cfg, secret, mount, transitMount, encryptionKey)
+	}
+
 	// Get all data from the Vault path
-	data, err := a.vaultClient.KVGet(config.NonEmpty("", cfg.KV.Mount, kvMount), secret.Path)
+	data, err := a.vaultClient.KVGet(mount, secret.Path)
 	if err != nil {
 		return fmt.Errorf("failed to get secrets from path %s: %w", secret.Path, err)
 	}
 
+	return a.saveDirKeys(cfg, secret, secret.Path, "", data, transitMount, encryptionKey)
+}
+
+// handleDirEntryRecursive walks the Vault tree under secret.Path using KVList
+// and saves every leaf secret into the target directory, preserving the sub-path structure.
+func (a *App) handleDirEntryRecursive(cfg *config.Config, secret *config.SecretEntry, mount, transitMount, encryptionKey string) error {
+	leafPaths, err := a.listRecursive(mount, secret.Path)
+	if err != nil {
+		return fmt.Errorf("failed to list secrets recursively under %s: %w", secret.Path, err)
+	}
+
+	if len(leafPaths) == 0 {
+		return fmt.Errorf("no secrets found recursively under path %s", secret.Path)
+	}
+
+	for _, leafPath := range leafPaths {
+		data, err := a.vaultClient.KVGet(mount, leafPath)
+		if err != nil {
+			return fmt.Errorf("failed to get secret at %s: %w", leafPath, err)
+		}
+
+		// Compute the relative sub-path from the base to build the directory structure
+		relPath := strings.TrimPrefix(leafPath, secret.Path)
+		relPath = strings.TrimPrefix(relPath, "/")
+
+		if err := a.saveDirKeys(cfg, secret, leafPath, relPath, data, transitMount, encryptionKey); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// listRecursive walks Vault KVList from basePath and returns all leaf (non-directory) paths.
+func (a *App) listRecursive(mount, basePath string) ([]string, error) {
+	entries, err := a.vaultClient.KVList(mount, basePath)
+	if err != nil {
+		return nil, err
+	}
+
+	var leaves []string
+	for _, entry := range entries {
+		fullPath := basePath + "/" + strings.TrimSuffix(entry, "/")
+		if strings.HasSuffix(entry, "/") {
+			// It's a sub-directory — recurse
+			subLeaves, err := a.listRecursive(mount, fullPath)
+			if err != nil {
+				return nil, err
+			}
+			leaves = append(leaves, subLeaves...)
+		} else {
+			// It's a leaf secret
+			leaves = append(leaves, fullPath)
+		}
+	}
+	return leaves, nil
+}
+
+// saveDirKeys extracts keys from Vault data and saves each as a file.
+// relPath is the relative sub-path (empty for non-recursive) used to create subdirectories.
+func (a *App) saveDirKeys(cfg *config.Config, secret *config.SecretEntry, vaultPath, relPath string, data map[string]interface{}, transitMount, encryptionKey string) error {
 	var keysToSave map[string]interface{}
 
 	// Handle encrypted multi-value data
 	if utils.IsEncryptedMultiValue(data) {
 		encKeyForDecrypt := config.NonEmpty(encryptionKey, cfg.GetTransitKey(), "")
 		if encKeyForDecrypt == "" {
-			return fmt.Errorf("encryption key required for encrypted secrets at path %s", secret.Path)
+			return fmt.Errorf("encryption key required for encrypted secrets at path %s", vaultPath)
 		}
 
 		decryptedData, err := utils.DecryptMultiValueData(data, a.vaultClient, cfg.GetTransitMount(transitMount), encKeyForDecrypt)
 		if err != nil {
-			return fmt.Errorf("failed to decrypt secrets from path %s: %w", secret.Path, err)
+			return fmt.Errorf("failed to decrypt secrets from path %s: %w", vaultPath, err)
 		}
 		keysToSave = decryptedData
 	} else {
@@ -308,7 +375,7 @@ func (a *App) handleDirEntry(cfg *config.Config, secret *config.SecretEntry, kvM
 		if len(keysToSave) == 0 {
 			if value, ok := data["value"]; ok {
 				// Use path name as filename
-				pathParts := strings.Split(secret.Path, "/")
+				pathParts := strings.Split(vaultPath, "/")
 				keyName := pathParts[len(pathParts)-1]
 				keysToSave[keyName] = value
 			}
@@ -316,7 +383,7 @@ func (a *App) handleDirEntry(cfg *config.Config, secret *config.SecretEntry, kvM
 	}
 
 	if len(keysToSave) == 0 {
-		return fmt.Errorf("no valid secrets found at path %s", secret.Path)
+		return fmt.Errorf("no valid secrets found at path %s", vaultPath)
 	}
 
 	// Save each key as a file in the directory
@@ -335,8 +402,14 @@ func (a *App) handleDirEntry(cfg *config.Config, secret *config.SecretEntry, kvM
 			continue // Skip this key as it's handled by its own file configuration
 		}
 
+		// Build the file name including the sub-path for recursive entries
+		fileName := keyName
+		if relPath != "" {
+			fileName = filepath.Join(relPath, keyName)
+		}
+
 		// Get directory file configuration for this key
-		fileConfig, err := cfg.GetDirFileConfig(secret, keyName)
+		fileConfig, err := cfg.GetDirFileConfig(secret, fileName)
 		if err != nil {
 			return fmt.Errorf("invalid file path for key %s: %w", keyName, err)
 		}
