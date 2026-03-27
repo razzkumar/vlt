@@ -6,7 +6,7 @@ MAIN_PATH=./cmd/cli
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS=-ldflags "-X main.version=$(VERSION)"
 
-.PHONY: all build clean install uninstall test test-coverage test-race fmt vet help
+.PHONY: all build clean install uninstall test test-coverage test-race test-integration fmt vet help
 
 all: build
 
@@ -48,6 +48,10 @@ test-coverage:
 # Run tests with race detector
 test-race:
 	go test -race ./...
+
+# Run integration tests (requires Docker)
+test-integration:  ## Run integration tests (requires Docker)
+	go test -tags=integration -count=1 -timeout 120s ./...
 
 # Download dependencies
 deps:
