@@ -4,8 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/razzkumar/vlt/internal/utils"
 )
 
 // ExportOptions contains options for the Export operation
@@ -92,10 +95,14 @@ func (a *App) Export(opts *ExportOptions) error {
 	if opts.Output == "" || opts.Output == "-" {
 		fmt.Println(output)
 	} else {
-		if err := os.WriteFile(opts.Output, []byte(output+"\n"), 0600); err != nil {
+		cleanOutput := filepath.Clean(opts.Output)
+		if utils.ContainsDotDot(cleanOutput) {
+			return fmt.Errorf("invalid output path: path traversal detected in %s", opts.Output)
+		}
+		if err := os.WriteFile(cleanOutput, []byte(output+"\n"), 0600); err != nil {
 			return fmt.Errorf("failed to write output file: %w", err)
 		}
-		fmt.Fprintf(os.Stderr, "Exported to: %s\n", opts.Output)
+		fmt.Fprintf(os.Stderr, "Exported to: %s\n", cleanOutput)
 	}
 
 	return nil

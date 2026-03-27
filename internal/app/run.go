@@ -12,6 +12,16 @@ import (
 	"github.com/razzkumar/vlt/pkg/config"
 )
 
+// ExitError represents a command that exited with a non-zero status code.
+// It is returned instead of calling os.Exit so callers can handle cleanup.
+type ExitError struct {
+	Code int
+}
+
+func (e *ExitError) Error() string {
+	return fmt.Sprintf("command exited with status %d", e.Code)
+}
+
 // RunOptions contains options for the Run operation
 type RunOptions struct {
 	KVMount       string
@@ -186,7 +196,7 @@ func (a *App) executeCommand(command string, args []string, envVars map[string]s
 		// Check if it's an exit error to preserve the exit code
 		if exitError, ok := err.(*exec.ExitError); ok {
 			if status, ok := exitError.Sys().(syscall.WaitStatus); ok {
-				os.Exit(status.ExitStatus())
+				return &ExitError{Code: status.ExitStatus()}
 			}
 		}
 		return fmt.Errorf("command execution failed: %w", err)

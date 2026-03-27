@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -58,7 +59,11 @@ func (a *App) GenerateEnvFile(configPath, outputPath string, encryptionKey strin
 		content += "\n" // Add final newline
 	}
 
-	if err := os.WriteFile(outputPath, []byte(content), 0600); err != nil {
+	cleanOutputPath := filepath.Clean(outputPath)
+	if utils.ContainsDotDot(cleanOutputPath) {
+		return fmt.Errorf("invalid output path: path traversal detected in %s", outputPath)
+	}
+	if err := os.WriteFile(cleanOutputPath, []byte(content), 0600); err != nil {
 		return fmt.Errorf("write output file: %w", err)
 	}
 
@@ -251,7 +256,10 @@ func (a *App) handleFileEntry(cfg *config.Config, secret *config.SecretEntry, kv
 	}
 
 	// Get the file configuration for this secret
-	fileConfig := cfg.GetSecretFileConfig(secret)
+	fileConfig, err := cfg.GetSecretFileConfig(secret)
+	if err != nil {
+		return fmt.Errorf("invalid file path: %w", err)
+	}
 
 	// Convert to utils.FileStorageOptions
 	storageOpts := utils.FileStorageOptions{
@@ -328,7 +336,10 @@ func (a *App) handleDirEntry(cfg *config.Config, secret *config.SecretEntry, kvM
 		}
 
 		// Get directory file configuration for this key
-		fileConfig := cfg.GetDirFileConfig(secret, keyName)
+		fileConfig, err := cfg.GetDirFileConfig(secret, keyName)
+		if err != nil {
+			return fmt.Errorf("invalid file path for key %s: %w", keyName, err)
+		}
 
 		// Convert to utils.FileStorageOptions
 		storageOpts := utils.FileStorageOptions{

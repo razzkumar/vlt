@@ -44,8 +44,8 @@ Reference Vault setup commands:
 ```bash
 # Enable auth methods
 vault auth enable approle
-auth enable github
-auth enable kubernetes
+vault auth enable github
+vault auth enable kubernetes
 
 # Retrieve ids / configure mappings
 vault read auth/approle/role/vlt-app/role-id
@@ -62,11 +62,35 @@ You can also provide most values via CLI flags (e.g., `vlt --vault-addr ... get 
 
 ## Working With Secrets
 
-- **Store values**: `vlt put --path myapp/config --from-env production.env` or `vlt put --path myapp/ssh --from-file ~/.ssh/id_rsa`.
+- **Store values**: `vlt put --path myapp/config --env-file production.env` or `vlt put --path myapp/ssh --from-file ~/.ssh/id_rsa`.
 - **Retrieve values**: `vlt get --path myapp/config --json` or `vlt get --path myapp/kv --key cert.pem`.
+- **Copy values**: `vlt copy --from myapp/config --to backups/myapp/config` or `vlt copy --from myapp --to backups/myapp --recursive`.
 - **Generate .env**: `vlt sync --config .vlt.yaml --output .env`.
 
 Transit encryption follows `TRANSIT`/`ENCRYPTION_KEY`/`TRANSIT_MOUNT` rules: set `TRANSIT=true` to force encryption (defaults key to `app-secrets` and mount to `transit`).
+
+## Copy Between Vaults
+
+`vlt copy` can write to another Vault instance by supplying destination-specific flags or env vars:
+
+```bash
+vlt copy \
+  --from myapp \
+  --to backups/myapp \
+  --recursive \
+  --kv-mount source \
+  --dest-kv-mount dr-secrets \
+  --dest-vault-addr https://vault-dr.example.com:8200 \
+  --dest-vault-token hvs.dr-token
+```
+
+Equivalent destination env vars are available: `DEST_VAULT_ADDR`, `DEST_VAULT_TOKEN`, `DEST_VAULT_NAMESPACE`, `DEST_VAULT_AUTH_METHOD`, `DEST_VAULT_ROLE_ID`, `DEST_VAULT_SECRET_ID`, `DEST_VAULT_GITHUB_TOKEN`, `DEST_VAULT_K8S_ROLE`, and `DEST_KV_MOUNT`.
+
+Behavior notes:
+- Missing destination mounts are created automatically as KV v2.
+- Recursive copy preserves relative paths under the destination root.
+- Values are copied raw; encrypted ciphertext is not decrypted or re-encrypted.
+- Without `--force`, copy stops at the first destination conflict. Recursive copy is not transactional, so earlier writes are not rolled back.
 
 ## File Storage From Config or Metadata
 
@@ -164,8 +188,8 @@ Troubleshooting tips:
 
 ## Dependency Management
 
-`go.mod` pins the following key dependencies (Go 1.25.1):
-- `github.com/hashicorp/vault/api` v1.21.0
+`go.mod` pins the following key dependencies (Go 1.25.0):
+- `github.com/hashicorp/vault/api` v1.22.0
 - `github.com/urfave/cli/v2` v2.27.7
 - `github.com/joho/godotenv` v1.5.1
 

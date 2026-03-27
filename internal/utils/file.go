@@ -13,8 +13,8 @@ import (
 	"github.com/razzkumar/vlt/pkg/vault"
 )
 
-// containsDotDot checks if a cleaned path still contains ".." path components
-func containsDotDot(path string) bool {
+// ContainsDotDot checks if a cleaned path still contains ".." path components
+func ContainsDotDot(path string) bool {
 	return slices.Contains(strings.Split(path, string(filepath.Separator)), "..")
 }
 
@@ -85,7 +85,7 @@ func SaveAsFileWithOptions(content string, opts FileStorageOptions) error {
 		fmt.Fprintf(os.Stderr, "warning: file path was sanitized: %q -> %q\n", opts.Path, cleanPath)
 	}
 	// Reject paths containing ".." after cleaning (traversal attempt)
-	if containsDotDot(cleanPath) {
+	if ContainsDotDot(cleanPath) {
 		return fmt.Errorf("path traversal not allowed: %s", cleanPath)
 	}
 	opts.Path = cleanPath

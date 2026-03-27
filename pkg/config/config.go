@@ -434,7 +434,7 @@ func (c *Config) GetFileStorageConfig() *FileStorageConfig {
 }
 
 // GetSecretFileConfig returns the resolved file configuration for a secret entry
-func (c *Config) GetSecretFileConfig(secretEntry *SecretEntry) SecretFileConfig {
+func (c *Config) GetSecretFileConfig(secretEntry *SecretEntry) (SecretFileConfig, error) {
 	fileStorage := c.GetFileStorageConfig()
 
 	if secretEntry.File == nil {
@@ -451,7 +451,7 @@ func (c *Config) GetSecretFileConfig(secretEntry *SecretEntry) SecretFileConfig 
 			Path:      filepath.Join(fileStorage.OutputDir, filename),
 			Mode:      fileStorage.DefaultMode,
 			CreateDir: &createDir,
-		}
+		}, nil
 	}
 
 	// Start with the secret's file config
@@ -475,19 +475,26 @@ func (c *Config) GetSecretFileConfig(secretEntry *SecretEntry) SecretFileConfig 
 		}
 		result.Path = filepath.Join(fileStorage.OutputDir, filename)
 	} else {
-		// Expand tilde and resolve relative paths
-		result.Path = expandPath(result.Path, fileStorage.OutputDir)
+		// Expand tilde and resolve relative paths with traversal protection
+		resolvedPath, err := expandPath(result.Path, fileStorage.OutputDir)
+		if err != nil {
+			return SecretFileConfig{}, err
+		}
+		result.Path = resolvedPath
 	}
 
-	return result
+	return result, nil
 }
 
 // GetDirFileConfig returns the file configuration for saving a key as a file in the specified directory
-func (c *Config) GetDirFileConfig(secretEntry *SecretEntry, keyName string) SecretFileConfig {
+func (c *Config) GetDirFileConfig(secretEntry *SecretEntry, keyName string) (SecretFileConfig, error) {
 	fileStorage := c.GetFileStorageConfig()
 
-	// Expand the directory path
-	dirPath := expandPath(secretEntry.Dir, fileStorage.OutputDir)
+	// Expand the directory path with traversal protection
+	dirPath, err := expandPath(secretEntry.Dir, fileStorage.OutputDir)
+	if err != nil {
+		return SecretFileConfig{}, err
+	}
 
 	// Create file path using key name as filename
 	filePath := filepath.Join(dirPath, keyName)
@@ -501,7 +508,7 @@ func (c *Config) GetDirFileConfig(secretEntry *SecretEntry, keyName string) Secr
 		Path:      filePath,
 		Mode:      fileStorage.DefaultMode,
 		CreateDir: &createDir,
-	}
+	}, nil
 }
 
 // Validate validates the Config structure
@@ -612,7 +619,7 @@ func validateFileMode(mode string) error {
 }
 
 // expandPath expands ~ and resolves relative paths, with path traversal protection
-func expandPath(path, outputDir string) string {
+func expandPath(path, outputDir string) (string, error) {
 	// Expand tilde
 	if strings.HasPrefix(path, "~/") {
 		homeDir, err := os.UserHomeDir()
@@ -629,5 +636,20 @@ func expandPath(path, outputDir string) string {
 	// Clean the path to resolve any ".." or "." components
 	path = filepath.Clean(path)
 
-	return path
+	// Verify the resolved path stays within the output directory
+	if outputDir != "" {
+		absOutputDir, err := filepath.Abs(outputDir)
+		if err != nil {
+			return "", fmt.Errorf("failed to resolve output directory: %w", err)
+		}
+		absPath, err := filepath.Abs(path)
+		if err != nil {
+			return "", fmt.Errorf("failed to resolve path: %w", err)
+		}
+		if !strings.HasPrefix(absPath, absOutputDir+string(filepath.Separator)) && absPath != absOutputDir {
+			return "", fmt.Errorf("path traversal detected: resolved path %s is outside output directory %s", absPath, absOutputDir)
+		}
+	}
+
+	return path, nil
 }

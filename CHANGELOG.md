@@ -102,8 +102,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 **Developer Experience**
 - CLI help and usage text for all commands
 - Clear error messages with remediation suggestions
-- Quiet mode for scripts (`-q` / `--quiet`)
-- Verbose output for debugging (`-v` / `--verbose`)
 - Global flags for Vault address, token, and auth methods
 
 **Build & Deployment**

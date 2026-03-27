@@ -88,7 +88,7 @@ _vlt_completion() {
             opts="--path --kv-mount --help"
             ;;
         copy|c|cp)
-            opts="--from --to --config --kv-mount --force --help"
+            opts="--from --to --config --kv-mount --dest-kv-mount --dest-vault-addr --dest-vault-token --dest-vault-namespace --dest-vault-auth-method --dest-vault-role-id --dest-vault-secret-id --dest-vault-github-token --dest-vault-k8s-role --recursive --force --help"
             ;;
         export|exp)
             opts="--path --output --format --encryption-key --kv-mount --transit-mount --help"
@@ -189,6 +189,16 @@ _vlt() {
                         '--to=[Destination KV path to copy to]:path:' \
                         '--config=[YAML config file with copy pairs]:file:_files' \
                         '--kv-mount=[KV v2 mount path]:mount:' \
+                        '--dest-kv-mount=[Destination KV v2 mount path]:mount:' \
+                        '--dest-vault-addr=[Destination Vault server address]:addr:' \
+                        '--dest-vault-token=[Destination Vault authentication token]:token:' \
+                        '--dest-vault-namespace=[Destination Vault namespace]:namespace:' \
+                        '--dest-vault-auth-method=[Destination Vault auth method]:method:(token approle github kubernetes)' \
+                        '--dest-vault-role-id=[Destination Vault AppRole role ID]:role_id:' \
+                        '--dest-vault-secret-id=[Destination Vault AppRole secret ID]:secret_id:' \
+                        '--dest-vault-github-token=[Destination GitHub personal access token]:token:' \
+                        '--dest-vault-k8s-role=[Destination Vault Kubernetes auth role]:role:' \
+                        '--recursive[Recursively copy all secrets under the source path]' \
                         '--force[Overwrite if destination exists]' \
                         '--help[Show help]'
                     ;;
@@ -261,6 +271,10 @@ complete -c vlt -f -n '__fish_use_subcommand' -a 'sync' -d 'Sync secrets from YA
 complete -c vlt -f -n '__fish_use_subcommand' -a 'run' -d 'Run command with secrets injected as environment variables'
 complete -c vlt -f -n '__fish_use_subcommand' -a 'json' -d 'Encrypt .env file content and output as JSON'
 complete -c vlt -f -n '__fish_use_subcommand' -a 'completion' -d 'Generate shell completion scripts'
+complete -c vlt -f -n '__fish_use_subcommand' -a 'delete' -d 'Delete a secret from Vault'
+complete -c vlt -f -n '__fish_use_subcommand' -a 'list' -d 'List secrets at a path in Vault'
+complete -c vlt -f -n '__fish_use_subcommand' -a 'export' -d 'Export secrets from Vault to a file'
+complete -c vlt -f -n '__fish_use_subcommand' -a 'import' -d 'Import secrets from a file to Vault'
 complete -c vlt -f -n '__fish_use_subcommand' -a 'copy' -d 'Copy secrets from one path to another'
 complete -c vlt -f -n '__fish_use_subcommand' -a 'help' -d 'Show help'
 
@@ -296,6 +310,16 @@ complete -c vlt -f -n '__fish_seen_subcommand_from copy c cp' -l 'from' -d 'Sour
 complete -c vlt -f -n '__fish_seen_subcommand_from copy c cp' -l 'to' -d 'Destination KV path to copy to'
 complete -c vlt -f -n '__fish_seen_subcommand_from copy c cp' -l 'config' -d 'YAML config file with copy pairs'
 complete -c vlt -f -n '__fish_seen_subcommand_from copy c cp' -l 'kv-mount' -d 'KV v2 mount path'
+complete -c vlt -f -n '__fish_seen_subcommand_from copy c cp' -l 'dest-kv-mount' -d 'Destination KV v2 mount path'
+complete -c vlt -f -n '__fish_seen_subcommand_from copy c cp' -l 'dest-vault-addr' -d 'Destination Vault server address'
+complete -c vlt -f -n '__fish_seen_subcommand_from copy c cp' -l 'dest-vault-token' -d 'Destination Vault authentication token'
+complete -c vlt -f -n '__fish_seen_subcommand_from copy c cp' -l 'dest-vault-namespace' -d 'Destination Vault namespace'
+complete -c vlt -f -n '__fish_seen_subcommand_from copy c cp' -l 'dest-vault-auth-method' -d 'Destination Vault auth method'
+complete -c vlt -f -n '__fish_seen_subcommand_from copy c cp' -l 'dest-vault-role-id' -d 'Destination Vault AppRole role ID'
+complete -c vlt -f -n '__fish_seen_subcommand_from copy c cp' -l 'dest-vault-secret-id' -d 'Destination Vault AppRole secret ID'
+complete -c vlt -f -n '__fish_seen_subcommand_from copy c cp' -l 'dest-vault-github-token' -d 'Destination GitHub personal access token'
+complete -c vlt -f -n '__fish_seen_subcommand_from copy c cp' -l 'dest-vault-k8s-role' -d 'Destination Vault Kubernetes auth role'
+complete -c vlt -f -n '__fish_seen_subcommand_from copy c cp' -l 'recursive' -d 'Recursively copy all secrets under the source path'
 complete -c vlt -f -n '__fish_seen_subcommand_from copy c cp' -l 'force' -d 'Overwrite if destination exists'
 
 # Get command options
@@ -403,7 +427,7 @@ Register-ArgumentCompleter -Native -CommandName vlt -ScriptBlock {
             return @('--path', '--kv-mount', '--help') | Where-Object { $_ -like "$wordToComplete*" }
         }
         { $_ -in @('copy', 'c', 'cp') } {
-            return @('--from', '--to', '--config', '--kv-mount', '--force', '--help') | Where-Object { $_ -like "$wordToComplete*" }
+            return @('--from', '--to', '--config', '--kv-mount', '--dest-kv-mount', '--dest-vault-addr', '--dest-vault-token', '--dest-vault-namespace', '--dest-vault-auth-method', '--dest-vault-role-id', '--dest-vault-secret-id', '--dest-vault-github-token', '--dest-vault-k8s-role', '--recursive', '--force', '--help') | Where-Object { $_ -like "$wordToComplete*" }
         }
         { $_ -in @('export', 'exp') } {
             return @('--path', '--output', '--format', '--encryption-key', '--kv-mount', '--transit-mount', '--help') | Where-Object { $_ -like "$wordToComplete*" }

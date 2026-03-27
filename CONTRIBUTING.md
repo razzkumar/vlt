@@ -4,7 +4,7 @@ Thank you for your interest in contributing to vlt! This guide explains how to s
 
 ## Prerequisites
 
-- **Go 1.21 or later** - [Install Go](https://golang.org/doc/install)
+- **Go 1.25 or later** - [Install Go](https://golang.org/doc/install)
 - **Git** - For version control and cloning the repository
 - **HashiCorp Vault instance** - For manual testing (optional, but recommended for testing encryption features)
   - Running locally: `vault server -dev` (development mode)

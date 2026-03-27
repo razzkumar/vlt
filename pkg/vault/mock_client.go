@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -14,12 +15,15 @@ type MockClient struct {
 
 	// In-memory KV storage: map[mount/path]data
 	kvStore map[string]map[string]interface{}
+	mounts  map[string]MountInfo
 
 	// Error injection
 	KVGetErr          error
 	KVPutErr          error
 	KVDeleteErr       error
 	KVListErr         error
+	MountExistsErr    error
+	CreateMountErr    error
 	TransitEncryptErr error
 	TransitDecryptErr error
 
@@ -28,6 +32,8 @@ type MockClient struct {
 	KVPutCalls          []KVPutCall
 	KVDeleteCalls       []KVDeleteCall
 	KVListCalls         []KVListCall
+	MountExistsCalls    []MountExistsCall
+	CreateMountCalls    []CreateMountCall
 	TransitEncryptCalls []TransitEncryptCall
 	TransitDecryptCalls []TransitDecryptCall
 }
@@ -57,6 +63,26 @@ type KVPutCall struct {
 	Data  map[string]interface{}
 }
 
+// MountInfo records mock mount metadata.
+type MountInfo struct {
+	Type    string
+	Options map[string]string
+}
+
+func defaultKVv2MountInfo() MountInfo {
+	return MountInfo{Type: "kv", Options: map[string]string{"version": "2"}}
+}
+
+// MountExistsCall records a call to MountExists.
+type MountExistsCall struct {
+	Mount string
+}
+
+// CreateMountCall records a call to CreateKVv2Mount.
+type CreateMountCall struct {
+	Mount string
+}
+
 // TransitEncryptCall records a call to TransitEncrypt
 type TransitEncryptCall struct {
 	TransitMount string
@@ -75,6 +101,9 @@ type TransitDecryptCall struct {
 func NewMockClient() *MockClient {
 	return &MockClient{
 		kvStore: make(map[string]map[string]interface{}),
+		mounts: map[string]MountInfo{
+			"home": defaultKVv2MountInfo(),
+		},
 	}
 }
 
@@ -176,7 +205,7 @@ func (m *MockClient) KVGet(mount, path string) (map[string]interface{}, error) {
 	key := m.makeKey(mount, path)
 	data, ok := m.kvStore[key]
 	if !ok {
-		return nil, errors.New("no data returned from vault")
+		return nil, ErrSecretNotFound
 	}
 
 	return data, nil
@@ -242,7 +271,51 @@ func (m *MockClient) KVList(mount, path string) ([]string, error) {
 		}
 	}
 
+	sort.Strings(result)
 	return result, nil
+}
+
+// MountExists reports whether the named mount exists.
+func (m *MockClient) MountExists(mount string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	normalized := strings.Trim(strings.TrimSpace(mount), "/")
+	m.MountExistsCalls = append(m.MountExistsCalls, MountExistsCall{Mount: normalized})
+
+	if m.MountExistsErr != nil {
+		return false, m.MountExistsErr
+	}
+	if normalized == "" {
+		return false, errors.New("mount path required")
+	}
+
+	_, ok := m.mounts[normalized]
+	return ok, nil
+}
+
+// CreateKVv2Mount creates a KV v2 mount in the mock mount store.
+func (m *MockClient) CreateKVv2Mount(mount string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	normalized := strings.Trim(strings.TrimSpace(mount), "/")
+	m.CreateMountCalls = append(m.CreateMountCalls, CreateMountCall{Mount: normalized})
+
+	if m.CreateMountErr != nil {
+		return m.CreateMountErr
+	}
+	if normalized == "" {
+		return errors.New("mount path required")
+	}
+
+	m.mounts[normalized] = defaultKVv2MountInfo()
+	return nil
+}
+
+// Addr returns a fixed mock Vault server address.
+func (m *MockClient) Addr() string {
+	return "http://mock-vault:8200"
 }
 
 // makeKey creates a storage key from mount and path
@@ -256,7 +329,20 @@ func (m *MockClient) SetSecret(mount, path string, data map[string]interface{}) 
 	defer m.mu.Unlock()
 
 	key := m.makeKey(mount, path)
+	m.mounts[strings.Trim(strings.TrimSpace(mount), "/")] = defaultKVv2MountInfo()
 	m.kvStore[key] = data
+}
+
+// SetMount is a helper to pre-populate the mock mount store.
+func (m *MockClient) SetMount(mount, mountType string, options map[string]string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	normalized := strings.Trim(strings.TrimSpace(mount), "/")
+	m.mounts[normalized] = MountInfo{
+		Type:    mountType,
+		Options: options,
+	}
 }
 
 // Reset clears all stored data and call history
@@ -265,16 +351,28 @@ func (m *MockClient) Reset() {
 	defer m.mu.Unlock()
 
 	m.kvStore = make(map[string]map[string]interface{})
+	m.mounts = map[string]MountInfo{
+		"home": {
+			Type: "kv",
+			Options: map[string]string{
+				"version": "2",
+			},
+		},
+	}
 	m.KVGetCalls = nil
 	m.KVPutCalls = nil
 	m.KVDeleteCalls = nil
 	m.KVListCalls = nil
+	m.MountExistsCalls = nil
+	m.CreateMountCalls = nil
 	m.TransitEncryptCalls = nil
 	m.TransitDecryptCalls = nil
 	m.KVGetErr = nil
 	m.KVPutErr = nil
 	m.KVDeleteErr = nil
 	m.KVListErr = nil
+	m.MountExistsErr = nil
+	m.CreateMountErr = nil
 	m.TransitEncryptErr = nil
 	m.TransitDecryptErr = nil
 }

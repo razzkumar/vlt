@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -226,6 +227,53 @@ func (c *Client) KVList(mount, path string) ([]string, error) {
 	return result, nil
 }
 
+// MountExists reports whether the named mount exists.
+func (c *Client) MountExists(mount string) (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(c.config.Timeout)*time.Second)
+	defer cancel()
+
+	mounts, err := c.client.Sys().ListMountsWithContext(ctx)
+	if err != nil {
+		return false, fmt.Errorf("list mounts failed: %w", err)
+	}
+
+	normalized := strings.Trim(strings.TrimSpace(mount), "/")
+	if normalized == "" {
+		return false, errors.New("mount path required")
+	}
+
+	_, ok := mounts[normalized+"/"]
+	return ok, nil
+}
+
+// CreateKVv2Mount creates a KV v2 mount at the provided path.
+func (c *Client) CreateKVv2Mount(mount string) error {
+	normalized := strings.Trim(strings.TrimSpace(mount), "/")
+	if normalized == "" {
+		return errors.New("mount path required")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(c.config.Timeout)*time.Second)
+	defer cancel()
+
+	err := c.client.Sys().MountWithContext(ctx, normalized, &vaultapi.MountInput{
+		Type: "kv",
+		Options: map[string]string{
+			"version": "2",
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("create kv v2 mount failed: %w", err)
+	}
+
+	return nil
+}
+
+// Addr returns the Vault server address this client is configured to use.
+func (c *Client) Addr() string {
+	return c.config.Addr
+}
+
 // authenticateVault performs authentication based on the configured method
 func authenticateVault(client *vaultapi.Client, cfg *config.VaultConfig) (string, error) {
 	switch cfg.AuthMethod {
@@ -292,8 +340,25 @@ func authenticateGitHub(client *vaultapi.Client, cfg *config.VaultConfig) (strin
 
 // authenticateKubernetes performs Kubernetes service account authentication
 func authenticateKubernetes(client *vaultapi.Client, cfg *config.VaultConfig) (string, error) {
+	// Validate and clean the JWT path to prevent path traversal
+	cleanPath := filepath.Clean(cfg.K8sJWTPath)
+	if strings.Contains(cleanPath, "..") {
+		return "", fmt.Errorf("invalid K8s JWT path: path traversal detected in %s", cfg.K8sJWTPath)
+	}
+	allowedPrefixes := []string{"/var/run/secrets/", "/run/secrets/"}
+	isStandard := false
+	for _, prefix := range allowedPrefixes {
+		if strings.HasPrefix(cleanPath, prefix) {
+			isStandard = true
+			break
+		}
+	}
+	if !isStandard {
+		fmt.Fprintf(os.Stderr, "Warning: K8s JWT path %q is outside standard service account directories\n", cleanPath)
+	}
+
 	// Read the service account token
-	jwtBytes, err := os.ReadFile(cfg.K8sJWTPath)
+	jwtBytes, err := os.ReadFile(cleanPath)
 	if err != nil {
 		return "", fmt.Errorf("unable to read Kubernetes JWT token from %s: %w", cfg.K8sJWTPath, err)
 	}
