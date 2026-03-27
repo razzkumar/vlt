@@ -628,16 +628,20 @@ func expandPath(path, outputDir string) (string, error) {
 		}
 	}
 
+	// Track whether the path was already absolute (including tilde-expanded)
+	wasAbsolute := filepath.IsAbs(path)
+
 	// If still relative and we have an output dir, make it relative to output dir
-	if !filepath.IsAbs(path) && outputDir != "" {
+	if !wasAbsolute && outputDir != "" {
 		path = filepath.Join(outputDir, path)
 	}
 
 	// Clean the path to resolve any ".." or "." components
 	path = filepath.Clean(path)
 
-	// Verify the resolved path stays within the output directory
-	if outputDir != "" {
+	// Only enforce containment for paths derived from outputDir (i.e. originally relative).
+	// Absolute paths (including tilde-expanded) are explicit user choices — don't restrict them.
+	if !wasAbsolute && outputDir != "" {
 		absOutputDir, err := filepath.Abs(outputDir)
 		if err != nil {
 			return "", fmt.Errorf("failed to resolve output directory: %w", err)

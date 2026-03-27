@@ -965,6 +965,13 @@ func newCopyDestinationClient(ctx *cli.Context) (vault.VaultClient, error) {
 		return nil, nil
 	}
 
+	// When a destination address is specified, require explicit authentication
+	// to prevent silently leaking source credentials to a different Vault server.
+	if overrides.Addr != "" && overrides.Token == "" && overrides.AuthMethod == "" &&
+		overrides.RoleID == "" && overrides.GitHubToken == "" && overrides.K8sRole == "" {
+		return nil, fmt.Errorf("--dest-vault-token or --dest-vault-auth-method required when --dest-vault-addr is specified")
+	}
+
 	cfg := config.GetVaultConfigWithOverrides(overrides)
 	client, err := vault.NewClient(cfg)
 	if err != nil {

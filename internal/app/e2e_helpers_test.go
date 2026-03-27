@@ -32,7 +32,7 @@ func TestMain(m *testing.M) {
 	ctx := context.Background()
 
 	container, err := vault.Run(ctx,
-		"hashicorp/vault:latest",
+		"hashicorp/vault:1.21.4",
 		vault.WithToken(testRootToken),
 		vault.WithInitCommand(
 			"secrets enable -path=home kv-v2",
