@@ -19,6 +19,15 @@ type VaultClient interface {
 
 	// KVList lists secrets at a path in Vault's KV v2 secrets engine
 	KVList(mount, path string) ([]string, error)
+
+	// MountExists reports whether the named mount exists.
+	MountExists(mount string) (bool, error)
+
+	// CreateKVv2Mount creates a KV v2 mount at the provided path.
+	CreateKVv2Mount(mount string) error
+
+	// Addr returns the Vault server address this client is configured to use.
+	Addr() string
 }
 
 // Compile-time check that Client implements VaultClient

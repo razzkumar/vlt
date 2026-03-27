@@ -9,6 +9,7 @@ import (
 	"github.com/razzkumar/vlt/internal/app"
 	"github.com/razzkumar/vlt/internal/utils"
 	"github.com/razzkumar/vlt/pkg/config"
+	"github.com/razzkumar/vlt/pkg/vault"
 )
 
 // GetCommands returns all CLI commands
@@ -102,7 +103,7 @@ func getPutCommand() *cli.Command {
 				return fmt.Errorf("--key cannot be used with --env-file or --from-file")
 			}
 
-			appInstance, err := app.NewWithOverrides(getOverridesFromContext(ctx))
+			appInstance, err := app.NewWithOverrides(overridesFromContext(ctx, ""))
 			if err != nil {
 				return fmt.Errorf("failed to create app: %w", err)
 			}
@@ -215,7 +216,7 @@ Examples:
 				return fmt.Errorf("either --path, --config, or config file (VLT_CONFIG env, ./.vlt.yaml, ~/.vlt.yaml) must be specified")
 			}
 
-			appInstance, err := app.NewWithOverrides(getOverridesFromContext(ctx))
+			appInstance, err := app.NewWithOverrides(overridesFromContext(ctx, ""))
 			if err != nil {
 				return fmt.Errorf("failed to create app: %w", err)
 			}
@@ -279,7 +280,7 @@ Examples:
 			},
 		},
 		Action: func(ctx *cli.Context) error {
-			appInstance, err := app.NewWithOverrides(getOverridesFromContext(ctx))
+			appInstance, err := app.NewWithOverrides(overridesFromContext(ctx, ""))
 			if err != nil {
 				return fmt.Errorf("failed to create app: %w", err)
 			}
@@ -328,6 +329,18 @@ Examples:
   # Copy with custom KV mount
   vlt copy --from myapp/config --to myapp/backup --kv-mount secret
 
+  # Copy to a different destination mount on the same Vault
+  vlt copy --from myapp/config --to myapp/backup --kv-mount source --dest-kv-mount backup
+
+  # Recursively copy a subtree
+  vlt copy --from myapp --to backups/myapp --recursive
+
+  # Copy to another Vault instance and create the destination mount if needed
+  vlt copy --from myapp --to myapp --recursive \
+    --dest-vault-addr https://vault-dr.example.com \
+    --dest-vault-token hvs.dr-token \
+    --dest-kv-mount dr-secrets
+
   # Overwrite existing destination
   vlt copy --from myapp/config --to myapp/backup --force
 
@@ -350,6 +363,55 @@ Examples:
 				Name:  "kv-mount",
 				Usage: "KV v2 mount path",
 				Value: "home",
+			},
+			&cli.StringFlag{
+				Name:    "dest-kv-mount",
+				Usage:   "Destination KV v2 mount path (defaults to --kv-mount)",
+				EnvVars: []string{"DEST_KV_MOUNT"},
+			},
+			&cli.StringFlag{
+				Name:    "dest-vault-addr",
+				Usage:   "Destination Vault server address",
+				EnvVars: []string{"DEST_VAULT_ADDR"},
+			},
+			&cli.StringFlag{
+				Name:    "dest-vault-token",
+				Usage:   "Destination Vault authentication token",
+				EnvVars: []string{"DEST_VAULT_TOKEN"},
+			},
+			&cli.StringFlag{
+				Name:    "dest-vault-namespace",
+				Usage:   "Destination Vault namespace",
+				EnvVars: []string{"DEST_VAULT_NAMESPACE"},
+			},
+			&cli.StringFlag{
+				Name:    "dest-vault-auth-method",
+				Usage:   "Destination Vault auth method (token, approle, github, kubernetes)",
+				EnvVars: []string{"DEST_VAULT_AUTH_METHOD"},
+			},
+			&cli.StringFlag{
+				Name:    "dest-vault-role-id",
+				Usage:   "Destination Vault AppRole role ID",
+				EnvVars: []string{"DEST_VAULT_ROLE_ID"},
+			},
+			&cli.StringFlag{
+				Name:    "dest-vault-secret-id",
+				Usage:   "Destination Vault AppRole secret ID",
+				EnvVars: []string{"DEST_VAULT_SECRET_ID"},
+			},
+			&cli.StringFlag{
+				Name:    "dest-vault-github-token",
+				Usage:   "Destination GitHub personal access token for auth",
+				EnvVars: []string{"DEST_VAULT_GITHUB_TOKEN"},
+			},
+			&cli.StringFlag{
+				Name:    "dest-vault-k8s-role",
+				Usage:   "Destination Vault Kubernetes auth role",
+				EnvVars: []string{"DEST_VAULT_K8S_ROLE"},
+			},
+			&cli.BoolFlag{
+				Name:  "recursive",
+				Usage: "Recursively copy all secrets under the source path",
 			},
 			&cli.BoolFlag{
 				Name:  "force",
@@ -378,23 +440,40 @@ Examples:
 				}
 			}
 
-			appInstance, err := app.NewWithOverrides(getOverridesFromContext(ctx))
+			appInstance, err := app.NewWithOverrides(overridesFromContext(ctx, ""))
 			if err != nil {
 				return fmt.Errorf("failed to create app: %w", err)
 			}
 
+			destClient, err := newCopyDestinationClient(ctx)
+			if err != nil {
+				return err
+			}
+
 			if configFile != "" {
-				return appInstance.CopyFromConfig(configFile, &app.CopyConfigOptions{
-					KVMount: ctx.String("kv-mount"),
-					Force:   ctx.Bool("force"),
-				})
+				opts := &app.CopyConfigOptions{
+					KVMount:     ctx.String("kv-mount"),
+					DestKVMount: ctx.String("dest-kv-mount"),
+					Force:       ctx.Bool("force"),
+					Recursive:   ctx.Bool("recursive"),
+				}
+				if destClient != nil {
+					return appInstance.CopyFromConfigTo(destClient, configFile, opts)
+				}
+				return appInstance.CopyFromConfig(configFile, opts)
 			}
 
 			opts := &app.CopyOptions{
-				KVMount:    ctx.String("kv-mount"),
-				SourcePath: from,
-				DestPath:   to,
-				Force:      ctx.Bool("force"),
+				KVMount:     ctx.String("kv-mount"),
+				DestKVMount: ctx.String("dest-kv-mount"),
+				SourcePath:  from,
+				DestPath:    to,
+				Force:       ctx.Bool("force"),
+				Recursive:   ctx.Bool("recursive"),
+			}
+
+			if destClient != nil {
+				return appInstance.CopyTo(destClient, opts)
 			}
 
 			return appInstance.Copy(opts)
@@ -432,7 +511,7 @@ Examples:
 			},
 		},
 		Action: func(ctx *cli.Context) error {
-			appInstance, err := app.NewWithOverrides(getOverridesFromContext(ctx))
+			appInstance, err := app.NewWithOverrides(overridesFromContext(ctx, ""))
 			if err != nil {
 				return fmt.Errorf("failed to create app: %w", err)
 			}
@@ -511,7 +590,7 @@ Examples:
 			},
 		},
 		Action: func(ctx *cli.Context) error {
-			appInstance, err := app.NewWithOverrides(getOverridesFromContext(ctx))
+			appInstance, err := app.NewWithOverrides(overridesFromContext(ctx, ""))
 			if err != nil {
 				return fmt.Errorf("failed to create app: %w", err)
 			}
@@ -586,7 +665,7 @@ Examples:
 			},
 		},
 		Action: func(ctx *cli.Context) error {
-			appInstance, err := app.NewWithOverrides(getOverridesFromContext(ctx))
+			appInstance, err := app.NewWithOverrides(overridesFromContext(ctx, ""))
 			if err != nil {
 				return fmt.Errorf("failed to create app: %w", err)
 			}
@@ -629,7 +708,7 @@ func getSyncCommand() *cli.Command {
 			},
 		},
 		Action: func(ctx *cli.Context) error {
-			appInstance, err := app.NewWithOverrides(getOverridesFromContext(ctx))
+			appInstance, err := app.NewWithOverrides(overridesFromContext(ctx, ""))
 			if err != nil {
 				return fmt.Errorf("failed to create app: %w", err)
 			}
@@ -741,7 +820,7 @@ First found config will be used automatically if no --config is specified.`,
 				return fmt.Errorf("command to run is required. Use -- to separate vlt options from the command")
 			}
 
-			appInstance, err := app.NewWithOverrides(getOverridesFromContext(ctx))
+			appInstance, err := app.NewWithOverrides(overridesFromContext(ctx, ""))
 			if err != nil {
 				return fmt.Errorf("failed to create app: %w", err)
 			}
@@ -833,7 +912,7 @@ Examples:
 			}
 
 			// For encryption, create app with vault client
-			appInstance, err := app.NewWithOverrides(getOverridesFromContext(ctx))
+			appInstance, err := app.NewWithOverrides(overridesFromContext(ctx, ""))
 			if err != nil {
 				return fmt.Errorf("failed to create app: %w", err)
 			}
@@ -849,18 +928,50 @@ Examples:
 	}
 }
 
-// getOverridesFromContext extracts VaultConfig overrides from CLI flags
-func getOverridesFromContext(ctx *cli.Context) *config.VaultConfigOverrides {
+// overridesFromContext extracts VaultConfig overrides from CLI flags with the given prefix.
+// Use prefix "" for source flags (e.g. "vault-addr") and "dest-" for destination flags (e.g. "dest-vault-addr").
+func overridesFromContext(ctx *cli.Context, prefix string) *config.VaultConfigOverrides {
+	flag := func(name string) string { return ctx.String(prefix + name) }
 	return &config.VaultConfigOverrides{
-		Addr:        ctx.String("vault-addr"),
-		Token:       ctx.String("vault-token"),
-		Namespace:   ctx.String("vault-namespace"),
-		AuthMethod:  ctx.String("vault-auth-method"),
-		RoleID:      ctx.String("vault-role-id"),
-		SecretID:    ctx.String("vault-secret-id"),
-		GitHubToken: ctx.String("vault-github-token"),
-		K8sRole:     ctx.String("vault-k8s-role"),
+		Addr:        flag("vault-addr"),
+		Token:       flag("vault-token"),
+		Namespace:   flag("vault-namespace"),
+		AuthMethod:  flag("vault-auth-method"),
+		RoleID:      flag("vault-role-id"),
+		SecretID:    flag("vault-secret-id"),
+		GitHubToken: flag("vault-github-token"),
+		K8sRole:     flag("vault-k8s-role"),
 	}
+}
+
+func hasVaultOverrides(overrides *config.VaultConfigOverrides) bool {
+	if overrides == nil {
+		return false
+	}
+
+	return overrides.Addr != "" ||
+		overrides.Token != "" ||
+		overrides.Namespace != "" ||
+		overrides.AuthMethod != "" ||
+		overrides.RoleID != "" ||
+		overrides.SecretID != "" ||
+		overrides.GitHubToken != "" ||
+		overrides.K8sRole != ""
+}
+
+func newCopyDestinationClient(ctx *cli.Context) (vault.VaultClient, error) {
+	overrides := overridesFromContext(ctx, "dest-")
+	if !hasVaultOverrides(overrides) {
+		return nil, nil
+	}
+
+	cfg := config.GetVaultConfigWithOverrides(overrides)
+	client, err := vault.NewClient(cfg)
+	if err != nil {
+		return nil, utils.EnhanceError(fmt.Errorf("failed to create destination vault client: %w", err))
+	}
+
+	return client, nil
 }
 
 // findConfigFile searches for config in order: env var, .vlt.yaml (current dir), ~/.vlt.yaml (global)

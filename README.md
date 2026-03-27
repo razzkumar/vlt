@@ -1,5 +1,9 @@
 # vlt
 
+[![CI](https://github.com/razzkumar/vlt/actions/workflows/ci.yml/badge.svg)](https://github.com/razzkumar/vlt/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/razzkumar/vlt)](https://goreportcard.com/report/github.com/razzkumar/vlt)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A minimal CLI tool for managing secrets with HashiCorp Vault, supporting optional Transit encryption.
 
 ## Features
@@ -32,6 +36,14 @@ Download from [GitHub Releases](https://github.com/razzkumar/vlt/releases).
 docker build -t vlt .
 docker run --rm -e VAULT_ADDR -e VAULT_TOKEN vlt get --path secrets/myapp
 ```
+
+### Go Install
+
+```bash
+go install github.com/razzkumar/vlt/cmd/cli@latest
+```
+
+Note: The binary will be named `cli`. You may want to rename it: `mv $(go env GOPATH)/bin/cli $(go env GOPATH)/bin/vlt`
 
 ## Quick Start
 

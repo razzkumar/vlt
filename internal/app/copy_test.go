@@ -415,3 +415,208 @@ func TestAppCopyFromConfig_FileNotFound(t *testing.T) {
 		t.Errorf("error %q should mention config file read failure", err.Error())
 	}
 }
+
+func TestAppCopyTo_DifferentClientCreatesDestinationMount(t *testing.T) {
+	sourceClient := vault.NewMockClient()
+	sourceClient.SetSecret("source", "app/config", map[string]interface{}{
+		"username": "demo",
+		"password": "s3cret",
+	})
+
+	destClient := vault.NewMockClient()
+	app := NewWithClient(sourceClient)
+
+	err := app.CopyTo(destClient, &CopyOptions{
+		KVMount:     "source",
+		DestKVMount: "backup",
+		SourcePath:  "app/config",
+		DestPath:    "app/config",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(destClient.MountExistsCalls) != 1 || destClient.MountExistsCalls[0].Mount != "backup" {
+		t.Fatalf("expected destination mount existence check for backup, got %+v", destClient.MountExistsCalls)
+	}
+	if len(destClient.CreateMountCalls) != 1 || destClient.CreateMountCalls[0].Mount != "backup" {
+		t.Fatalf("expected destination mount creation for backup, got %+v", destClient.CreateMountCalls)
+	}
+	if len(destClient.KVPutCalls) != 1 {
+		t.Fatalf("expected one destination write, got %d", len(destClient.KVPutCalls))
+	}
+	if destClient.KVPutCalls[0].Mount != "backup" || destClient.KVPutCalls[0].Path != "app/config" {
+		t.Fatalf("unexpected destination write: %+v", destClient.KVPutCalls[0])
+	}
+	if len(sourceClient.KVPutCalls) != 0 {
+		t.Fatalf("source client should not receive writes, got %+v", sourceClient.KVPutCalls)
+	}
+}
+
+func TestAppCopyRecursive(t *testing.T) {
+	sourceClient := vault.NewMockClient()
+	sourceClient.SetSecret("source", "apps/team", map[string]interface{}{
+		"root": "value",
+	})
+	sourceClient.SetSecret("source", "apps/team/api", map[string]interface{}{
+		"token": "abc",
+	})
+	sourceClient.SetSecret("source", "apps/team/db/config", map[string]interface{}{
+		"user": "app",
+		"pass": "secret",
+	})
+	sourceClient.SetSecret("source", "apps/team/db/readonly", map[string]interface{}{
+		"user": "readonly",
+	})
+
+	destClient := vault.NewMockClient()
+	app := NewWithClient(sourceClient)
+
+	err := app.CopyTo(destClient, &CopyOptions{
+		KVMount:     "source",
+		DestKVMount: "backup",
+		SourcePath:  "apps/team",
+		DestPath:    "backups/team",
+		Recursive:   true,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(destClient.CreateMountCalls) != 1 {
+		t.Fatalf("expected destination mount creation, got %+v", destClient.CreateMountCalls)
+	}
+	if len(destClient.KVPutCalls) != 4 {
+		t.Fatalf("expected 4 copied secrets, got %d", len(destClient.KVPutCalls))
+	}
+
+	gotPaths := make(map[string]map[string]interface{}, len(destClient.KVPutCalls))
+	for _, call := range destClient.KVPutCalls {
+		gotPaths[call.Path] = call.Data
+	}
+
+	expectedPaths := map[string]int{
+		"backups/team":             1,
+		"backups/team/api":         1,
+		"backups/team/db/config":   2,
+		"backups/team/db/readonly": 1,
+	}
+
+	for path, wantKeys := range expectedPaths {
+		data, ok := gotPaths[path]
+		if !ok {
+			t.Fatalf("expected copied path %s, got %v", path, gotPaths)
+		}
+		if len(data) != wantKeys {
+			t.Fatalf("expected %d keys at %s, got %d", wantKeys, path, len(data))
+		}
+	}
+}
+
+func TestAppCopyRecursive_StopsOnFirstConflict(t *testing.T) {
+	sourceClient := vault.NewMockClient()
+	sourceClient.SetSecret("source", "apps/team/api", map[string]interface{}{
+		"token": "abc",
+	})
+	sourceClient.SetSecret("source", "apps/team/db", map[string]interface{}{
+		"password": "secret",
+	})
+
+	destClient := vault.NewMockClient()
+	destClient.SetMount("backup", "kv", map[string]string{"version": "2"})
+	destClient.SetSecret("backup", "backups/team/api", map[string]interface{}{
+		"token": "existing",
+	})
+
+	app := NewWithClient(sourceClient)
+	err := app.CopyTo(destClient, &CopyOptions{
+		KVMount:     "source",
+		DestKVMount: "backup",
+		SourcePath:  "apps/team",
+		DestPath:    "backups/team",
+		Recursive:   true,
+	})
+	if err == nil {
+		t.Fatal("expected conflict error, got nil")
+	}
+	if !strings.Contains(err.Error(), "destination already exists") {
+		t.Fatalf("expected conflict error, got %v", err)
+	}
+	if len(destClient.KVPutCalls) != 0 {
+		t.Fatalf("expected no writes after first conflict, got %+v", destClient.KVPutCalls)
+	}
+	if len(destClient.CreateMountCalls) != 0 {
+		t.Fatalf("did not expect mount creation when mount already exists, got %+v", destClient.CreateMountCalls)
+	}
+}
+
+func TestAppCopyTo_CreateMountError(t *testing.T) {
+	sourceClient := vault.NewMockClient()
+	sourceClient.SetSecret("source", "app/config", map[string]interface{}{
+		"key": "value",
+	})
+
+	destClient := vault.NewMockClient()
+	destClient.CreateMountErr = errors.New("permission denied")
+
+	app := NewWithClient(sourceClient)
+	err := app.CopyTo(destClient, &CopyOptions{
+		KVMount:     "source",
+		DestKVMount: "backup",
+		SourcePath:  "app/config",
+		DestPath:    "app/config",
+	})
+	if err == nil {
+		t.Fatal("expected mount creation error, got nil")
+	}
+	if !strings.Contains(err.Error(), "failed to ensure destination mount") {
+		t.Fatalf("expected destination mount error, got %v", err)
+	}
+	if len(destClient.KVPutCalls) != 0 {
+		t.Fatalf("expected no writes when mount creation fails, got %+v", destClient.KVPutCalls)
+	}
+}
+
+func TestAppCopyFromConfigTo_Recursive(t *testing.T) {
+	sourceClient := vault.NewMockClient()
+	sourceClient.SetSecret("source", "apps/team/api", map[string]interface{}{
+		"token": "abc",
+	})
+	sourceClient.SetSecret("source", "apps/team/db", map[string]interface{}{
+		"password": "secret",
+	})
+
+	destClient := vault.NewMockClient()
+
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "copy-config.yaml")
+	configYAML := `copies:
+  - from: apps/team
+    to: backups/team
+`
+	if err := os.WriteFile(configPath, []byte(configYAML), 0644); err != nil {
+		t.Fatalf("failed to write temp config: %v", err)
+	}
+
+	app := NewWithClient(sourceClient)
+	err := app.CopyFromConfigTo(destClient, configPath, &CopyConfigOptions{
+		KVMount:     "source",
+		DestKVMount: "backup",
+		Recursive:   true,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(destClient.KVPutCalls) != 2 {
+		t.Fatalf("expected 2 copied secrets, got %d", len(destClient.KVPutCalls))
+	}
+
+	gotPaths := []string{destClient.KVPutCalls[0].Path, destClient.KVPutCalls[1].Path}
+	expected := []string{"backups/team/api", "backups/team/db"}
+	for i, want := range expected {
+		if gotPaths[i] != want {
+			t.Fatalf("expected copied path %s at index %d, got %s", want, i, gotPaths[i])
+		}
+	}
+}

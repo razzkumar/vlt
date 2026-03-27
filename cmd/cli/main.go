@@ -1,11 +1,13 @@
 package main
 
 import (
+	"errors"
 	"log"
 	"os"
 
 	"github.com/urfave/cli/v2"
 
+	applib "github.com/razzkumar/vlt/internal/app"
 	vaultcli "github.com/razzkumar/vlt/pkg/cli"
 )
 
@@ -129,7 +131,7 @@ EXAMPLES:
   TRANSIT=false vlt put --path secrets/db_password --value "supersecret"
   
   # Store multiple secrets from .env file (merges with existing)
-  vlt put --encryption-key mykey --path secrets/myapp --from-env .env
+  vlt put --encryption-key mykey --path secrets/myapp --env-file .env
   
   # Store file as base64 encoded value
   vlt put --encryption-key mykey --path secrets/ssh_key --from-file ~/.ssh/id_rsa
@@ -166,6 +168,10 @@ EXAMPLES:
 	}
 
 	if err := app.Run(os.Args); err != nil {
+		var exitErr *applib.ExitError
+		if errors.As(err, &exitErr) {
+			os.Exit(exitErr.Code)
+		}
 		log.Fatal(err)
 	}
 }
