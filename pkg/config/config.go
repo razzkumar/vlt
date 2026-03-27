@@ -74,7 +74,8 @@ type SecretEntry struct {
 	File *SecretFileConfig `yaml:"file,omitempty"`
 
 	// Directory configuration - when all keys should be saved as individual files
-	Dir string `yaml:"dir,omitempty"` // directory path to save all keys as individual files
+	Dir       string `yaml:"dir,omitempty"`       // directory path to save all keys as individual files
+	Recursive bool   `yaml:"recursive,omitempty"` // recursively fetch sub-paths (requires dir)
 }
 
 // VaultConfig holds Vault client configuration
@@ -582,6 +583,11 @@ func (s *SecretEntry) Validate() error {
 		// dir and file are mutually exclusive
 		if s.File != nil && s.Dir != "" {
 			return fmt.Errorf("cannot specify both 'file' and 'dir'")
+		}
+
+		// recursive requires dir
+		if s.Recursive && s.Dir == "" {
+			return fmt.Errorf("'recursive' requires 'dir' to be specified")
 		}
 
 		// Validate file mode if specified

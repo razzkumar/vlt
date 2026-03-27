@@ -1003,6 +1003,17 @@ func TestSecretEntry_Validate(t *testing.T) {
 			wantErr: true,
 			errMsg:  "file.mode",
 		},
+		{
+			name:    "valid recursive dir entry",
+			entry:   SecretEntry{Path: "creds/gpg", Dir: "/tmp/gpg-keys", Recursive: true},
+			wantErr: false,
+		},
+		{
+			name:    "recursive without dir",
+			entry:   SecretEntry{Path: "creds/gpg", Recursive: true},
+			wantErr: true,
+			errMsg:  "'recursive' requires 'dir'",
+		},
 	}
 
 	for _, tt := range tests {

@@ -99,10 +99,10 @@ upload_file() {
     echo "Uploading: $file → $vault_path (key: $key)"
 
     if vlt put "${flags[@]}" --from-file "$file"; then
-        ((count++))
+        ((count++)) || true
     else
         echo "  FAILED: $file"
-        ((failed++))
+        ((failed++)) || true
     fi
 }
 

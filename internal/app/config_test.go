@@ -375,6 +375,129 @@ secrets:
 	}
 }
 
+func TestHandleDirEntry_Recursive(t *testing.T) {
+	tmpDir := t.TempDir()
+	configFile := filepath.Join(tmpDir, "config.yaml")
+	outputDir := filepath.Join(tmpDir, "gpg-keys")
+
+	configContent := `version: 1
+kv:
+  mount: kv
+secrets:
+  - path: creds/gpg
+    dir: ` + outputDir + `
+    recursive: true
+`
+	if err := os.WriteFile(configFile, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to create config file: %v", err)
+	}
+
+	mock := vault.NewMockClient()
+	// Set up a tree of secrets under creds/gpg
+	mock.SetSecret("kv", "creds/gpg/public-key", map[string]interface{}{
+		"data": "PUBLIC_KEY_CONTENT",
+	})
+	mock.SetSecret("kv", "creds/gpg/private-key", map[string]interface{}{
+		"data": "PRIVATE_KEY_CONTENT",
+	})
+	mock.SetSecret("kv", "creds/gpg/subring/trust", map[string]interface{}{
+		"data": "TRUST_CONTENT",
+	})
+
+	app := NewWithClient(mock)
+
+	// Capture stderr (GenerateEnvFile prints a message)
+	oldStderr := os.Stderr
+	_, w, _ := os.Pipe()
+	os.Stderr = w
+
+	err := app.GenerateEnvFile(configFile, filepath.Join(tmpDir, "output.env"), "")
+
+	w.Close()
+	os.Stderr = oldStderr
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify KVList was called (recursive listing)
+	if len(mock.KVListCalls) == 0 {
+		t.Error("expected KVList to be called for recursive listing")
+	}
+
+	// Verify files were created with correct content
+	tests := []struct {
+		path    string
+		content string
+	}{
+		{filepath.Join(outputDir, "public-key", "data"), "PUBLIC_KEY_CONTENT"},
+		{filepath.Join(outputDir, "private-key", "data"), "PRIVATE_KEY_CONTENT"},
+		{filepath.Join(outputDir, "subring", "trust", "data"), "TRUST_CONTENT"},
+	}
+
+	for _, tt := range tests {
+		content, err := os.ReadFile(tt.path)
+		if err != nil {
+			t.Errorf("failed to read file %s: %v", tt.path, err)
+			continue
+		}
+		if string(content) != tt.content {
+			t.Errorf("file %s: expected %q, got %q", tt.path, tt.content, string(content))
+		}
+	}
+}
+
+func TestHandleDirEntry_NonRecursive(t *testing.T) {
+	tmpDir := t.TempDir()
+	configFile := filepath.Join(tmpDir, "config.yaml")
+	outputDir := filepath.Join(tmpDir, "certs")
+
+	configContent := `version: 1
+kv:
+  mount: kv
+secrets:
+  - path: app/certs
+    dir: ` + outputDir + `
+`
+	if err := os.WriteFile(configFile, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to create config file: %v", err)
+	}
+
+	mock := vault.NewMockClient()
+	mock.SetSecret("kv", "app/certs", map[string]interface{}{
+		"tls_crt": "CERT_DATA",
+		"tls_key": "KEY_DATA",
+	})
+
+	app := NewWithClient(mock)
+
+	oldStderr := os.Stderr
+	_, w, _ := os.Pipe()
+	os.Stderr = w
+
+	err := app.GenerateEnvFile(configFile, filepath.Join(tmpDir, "output.env"), "")
+
+	w.Close()
+	os.Stderr = oldStderr
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// KVList should NOT be called for non-recursive
+	if len(mock.KVListCalls) != 0 {
+		t.Errorf("expected no KVList calls for non-recursive dir, got %d", len(mock.KVListCalls))
+	}
+
+	// Verify files
+	for _, name := range []string{"tls_crt", "tls_key"} {
+		path := filepath.Join(outputDir, name)
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			t.Errorf("expected file %s to exist", path)
+		}
+	}
+}
+
 func TestGetFromConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	configFile := filepath.Join(tmpDir, "config.yaml")
